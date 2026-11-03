@@ -346,6 +346,23 @@ func SetApiRouter(router *gin.Engine) {
 			systemInfoRoute.DELETE("/stale-instances", controller.DeleteStaleSystemInstances)
 			systemInfoRoute.DELETE("/instances/:node_name", controller.DeleteStaleSystemInstance)
 		}
+		cpaSubscriptionRoute := apiRouter.Group("/subscription-accounts")
+		cpaSubscriptionRoute.Use(middleware.RootAuth())
+		{
+			cpaSubscriptionRoute.GET("/", controller.ListCpaSubscriptionOverview)
+			cpaSubscriptionRoute.POST("/instances", controller.CreateCpaInstance)
+			cpaSubscriptionRoute.PUT("/instances/:id", controller.UpdateCpaInstance)
+			cpaSubscriptionRoute.DELETE("/instances/:id", controller.DeleteCpaInstance)
+			cpaSubscriptionRoute.POST("/instances/test", controller.TestCpaInstance)
+			cpaSubscriptionRoute.POST("/sync", controller.SyncCpaInstances)
+			cpaSubscriptionRoute.POST("/refresh-all", controller.RefreshAllCpaAccounts)
+			cpaSubscriptionRoute.PUT("/settings", controller.UpdateCpaSubscriptionSettings)
+			cpaSubscriptionRoute.POST("/account/refresh", controller.RefreshCpaAccount)
+			cpaSubscriptionRoute.GET("/account/models", controller.ListCpaAccountModels)
+			cpaSubscriptionRoute.POST("/account/status", controller.SetCpaAccountStatus)
+			cpaSubscriptionRoute.POST("/account/refresh-token", controller.RefreshCpaAccountToken)
+			cpaSubscriptionRoute.POST("/account/reset-grant", controller.ClaimCpaAccountResetGrant)
+		}
 
 		dataRoute := apiRouter.Group("/data")
 		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)

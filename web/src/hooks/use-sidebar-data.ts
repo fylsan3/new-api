@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   Activity,
+  BadgeCheck,
   Box,
   ClipboardList,
   CreditCard,
@@ -132,6 +133,12 @@ export function useSidebarData(): SidebarData {
         id: 'admin',
         title: t('Admin'),
         items: [
+          {
+            title: t('Subscription Accounts'),
+            url: '/subscription-accounts',
+            icon: BadgeCheck,
+            requiredRole: ROLE.SUPER_ADMIN,
+          },
           {
             title: t('Channels'),
             url: '/channels',
