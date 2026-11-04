@@ -29,6 +29,10 @@ func TestCpaSecretRoundTrip(t *testing.T) {
 	common.CryptoSecret = "other"
 	_, err = DecryptCpaSecret(enc)
 	assert.Error(t, err)
+
+	_, err = DecryptCpaSecret("")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not saved")
 }
 
 func TestNormalizeCpaBaseURL(t *testing.T) {

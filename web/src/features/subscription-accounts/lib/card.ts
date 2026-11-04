@@ -67,6 +67,28 @@ export function credentialCount(value: unknown): number {
   return 0
 }
 
+/** Counts at or above this are shortened to k / M on the card. */
+export const COMPACT_COUNT_THRESHOLD = 10_000
+
+/**
+ * Card count text: below 10,000 the exact number; from 10,000 on "12.3k" /
+ * "1.2M" (always k/M, regardless of UI language). Returns compact=true when
+ * shortened so the caller can offer the exact number on hover.
+ */
+export function compactCount(value: number): {
+  text: string
+  compact: boolean
+} {
+  const n = Number.isFinite(value) ? value : 0
+  if (Math.abs(n) < COMPACT_COUNT_THRESHOLD) {
+    return { text: String(n), compact: false }
+  }
+  const [div, unit] = Math.abs(n) >= 1_000_000 ? [1_000_000, 'M'] : [1_000, 'k']
+  // Truncate (not round) so 9,999,999 never shows as "10000k".
+  const scaled = Math.trunc((n / div) * 10) / 10
+  return { text: `${scaled}${unit}`, compact: true }
+}
+
 /** CPA `recent_requests`: 20 buckets of 10 minutes, oldest first. */
 const RECENT_BUCKET_SECONDS = 600
 

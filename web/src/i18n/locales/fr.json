@@ -7523,6 +7523,18 @@
     "Other CPA accounts": "Autres comptes CPA",
     "Unknown CPA account": "Compte CPA inconnu",
     "Error rate (24h)": "Taux d’erreur (24 h)",
-    "Site-wide relay requests": "Requêtes relayées (tout le site)"
+    "Site-wide relay requests": "Requêtes relayées (tout le site)",
+    "Account details": "Détails du compte",
+    "File name": "Nom du fichier",
+    "Last token refresh": "Dernier renouvellement du jeton",
+    "Request stats": "Statistiques de requêtes",
+    "Usage (30 days, New API collected)": "Utilisation (30 jours, collectée par New API)",
+    "Requests / failed": "Requêtes / échecs",
+    "Cache read / write": "Cache lecture / écriture",
+    "Quota reset times": "Heures de réinitialisation du quota",
+    "Quota checked at": "Quota vérifié le",
+    "Quota check error": "Erreur de vérification du quota",
+    "Reset grant check error": "Erreur de vérification des réinitialisations",
+    "Source CPA": "CPA d’origine"
   }
 }

@@ -7523,6 +7523,18 @@
     "Other CPA accounts": "Tài khoản CPA khác",
     "Unknown CPA account": "Tài khoản CPA không xác định",
     "Error rate (24h)": "Tỷ lệ lỗi (24 giờ)",
-    "Site-wide relay requests": "Yêu cầu chuyển tiếp toàn trang"
+    "Site-wide relay requests": "Yêu cầu chuyển tiếp toàn trang",
+    "Account details": "Chi tiết tài khoản",
+    "File name": "Tên tệp",
+    "Last token refresh": "Lần làm mới token gần nhất",
+    "Request stats": "Thống kê yêu cầu",
+    "Usage (30 days, New API collected)": "Sử dụng (30 ngày, New API thu thập)",
+    "Requests / failed": "Yêu cầu / thất bại",
+    "Cache read / write": "Cache đọc / ghi",
+    "Quota reset times": "Thời gian đặt lại hạn mức",
+    "Quota checked at": "Thời điểm kiểm tra hạn mức",
+    "Quota check error": "Lỗi kiểm tra hạn mức",
+    "Reset grant check error": "Lỗi kiểm tra lượt đặt lại",
+    "Source CPA": "CPA nguồn"
   }
 }

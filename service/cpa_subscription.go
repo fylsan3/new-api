@@ -75,6 +75,9 @@ func EncryptCpaSecret(plain string) (string, error) {
 }
 
 func DecryptCpaSecret(stored string) (string, error) {
+	if strings.TrimSpace(stored) == "" {
+		return "", errors.New("CPA management key is not saved; edit this CPA and enter it again")
+	}
 	if !strings.HasPrefix(stored, cpaSecretPrefix) {
 		return "", errors.New("unsupported secret format")
 	}

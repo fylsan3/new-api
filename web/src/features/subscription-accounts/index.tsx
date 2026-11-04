@@ -42,8 +42,10 @@ import { getServerErrorMessage } from '@/lib/server-error-message'
 
 import {
   OVERVIEW_QUERY_KEY,
+  STATS_QUERY_KEY,
   deleteInstance,
   getOverview,
+  getStats,
   syncInstances,
 } from './api'
 import { AccountCard } from './components/account-card'
@@ -52,7 +54,10 @@ import { InstanceDialog } from './components/instance-dialog'
 import { RefreshControls } from './components/refresh-controls'
 import { alertsOf, cardUsageOf } from './lib/card'
 import { sortAccounts } from './lib/quota'
-import type { CpaInstance } from './types'
+import type { CpaAccountStats, CpaInstance } from './types'
+
+/** Window of the per-account token breakdown shown in card details. */
+const CARD_STATS_DAYS = 30
 
 export function SubscriptionAccounts() {
   const { t } = useTranslation()
@@ -65,6 +70,20 @@ export function SubscriptionAccounts() {
     queryFn: getOverview,
     refetchInterval: (q) => (q.state.data?.refresh_all_running ? 3000 : 30000),
   })
+
+  // Token breakdown for the hover details; one request for all cards.
+  const statsQuery = useQuery({
+    queryKey: [...STATS_QUERY_KEY, CARD_STATS_DAYS],
+    queryFn: () => getStats(CARD_STATS_DAYS),
+    enabled: !!query.data?.instances.length,
+    staleTime: 60_000,
+  })
+  const statsByAccount = new Map<string, CpaAccountStats>(
+    (statsQuery.data?.accounts ?? []).map((row) => [
+      `${row.instance_id}/${row.name}`,
+      row,
+    ])
+  )
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: OVERVIEW_QUERY_KEY })
@@ -147,6 +166,10 @@ export function SubscriptionAccounts() {
             account={account}
             instanceName={instanceNames.get(account.instance_id) ?? '-'}
             usage={cardUsageOf(data.usage, account)}
+            stats={
+              statsByAccount.get(`${account.instance_id}/${account.name}`) ??
+              null
+            }
             collecting={collecting.has(account.instance_id)}
             alerts={alertsOf(data.alerts, account)}
           />

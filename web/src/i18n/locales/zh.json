@@ -7523,6 +7523,18 @@
     "Other CPA accounts": "其他 CPA 账号",
     "Unknown CPA account": "未知 CPA 账号",
     "Error rate (24h)": "错误率（24 小时）",
-    "Site-wide relay requests": "全站转发请求"
+    "Site-wide relay requests": "全站转发请求",
+    "Account details": "账号详情",
+    "File name": "文件名",
+    "Last token refresh": "上次刷新 token",
+    "Request stats": "请求统计",
+    "Usage (30 days, New API collected)": "用量（近 30 天，New API 采集）",
+    "Requests / failed": "请求 / 失败",
+    "Cache read / write": "缓存读 / 写",
+    "Quota reset times": "额度重置时间",
+    "Quota checked at": "额度查询时间",
+    "Quota check error": "额度查询失败原因",
+    "Reset grant check error": "重置卡查询失败原因",
+    "Source CPA": "所属 CPA"
   }
 }

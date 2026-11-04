@@ -54,8 +54,9 @@ const STATE_CLASS: Record<SocksState, { badge: string; dot: string }> = {
 }
 
 /**
- * SOCKS status from the last check through CPA. Hover shows the masked
- * address; clicking fetches the full address (with credentials) on demand.
+ * SOCKS status from the last check through CPA. No hover popup (the masked
+ * address is already in the card's hover details); clicking fetches the full
+ * address (with credentials) on demand.
  */
 export function SocksBadge(props: {
   account: CpaAccount
@@ -95,8 +96,6 @@ export function SocksBadge(props: {
       }}
     >
       <PopoverTrigger
-        openOnHover
-        delay={150}
         aria-label={t('SOCKS proxy')}
         render={
           <button

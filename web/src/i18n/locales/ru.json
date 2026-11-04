@@ -7523,6 +7523,18 @@
     "Other CPA accounts": "Другие аккаунты CPA",
     "Unknown CPA account": "Неизвестный аккаунт CPA",
     "Error rate (24h)": "Доля ошибок (24 ч)",
-    "Site-wide relay requests": "Все ретранслируемые запросы сайта"
+    "Site-wide relay requests": "Все ретранслируемые запросы сайта",
+    "Account details": "Сведения об аккаунте",
+    "File name": "Имя файла",
+    "Last token refresh": "Последнее обновление токена",
+    "Request stats": "Статистика запросов",
+    "Usage (30 days, New API collected)": "Использование (30 дней, собрано New API)",
+    "Requests / failed": "Запросы / ошибки",
+    "Cache read / write": "Кэш чтение / запись",
+    "Quota reset times": "Время сброса квот",
+    "Quota checked at": "Квота проверена",
+    "Quota check error": "Ошибка проверки квоты",
+    "Reset grant check error": "Ошибка проверки сбросов",
+    "Source CPA": "CPA-источник"
   }
 }

@@ -7523,6 +7523,18 @@
     "Other CPA accounts": "Other CPA accounts",
     "Unknown CPA account": "Unknown CPA account",
     "Error rate (24h)": "Error rate (24h)",
-    "Site-wide relay requests": "Site-wide relay requests"
+    "Site-wide relay requests": "Site-wide relay requests",
+    "Account details": "Account details",
+    "File name": "File name",
+    "Last token refresh": "Last token refresh",
+    "Request stats": "Request stats",
+    "Usage (30 days, New API collected)": "Usage (30 days, New API collected)",
+    "Requests / failed": "Requests / failed",
+    "Cache read / write": "Cache read / write",
+    "Quota reset times": "Quota reset times",
+    "Quota checked at": "Quota checked at",
+    "Quota check error": "Quota check error",
+    "Reset grant check error": "Reset grant check error",
+    "Source CPA": "Source CPA"
   }
 }

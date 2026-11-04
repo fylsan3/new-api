@@ -7523,6 +7523,18 @@
     "Other CPA accounts": "その他の CPA アカウント",
     "Unknown CPA account": "不明な CPA アカウント",
     "Error rate (24h)": "エラー率（24 時間）",
-    "Site-wide relay requests": "サイト全体のリレーリクエスト"
+    "Site-wide relay requests": "サイト全体のリレーリクエスト",
+    "Account details": "アカウント詳細",
+    "File name": "ファイル名",
+    "Last token refresh": "前回のトークン更新",
+    "Request stats": "リクエスト統計",
+    "Usage (30 days, New API collected)": "使用量（30 日間、New API 収集）",
+    "Requests / failed": "リクエスト / 失敗",
+    "Cache read / write": "キャッシュ読み取り / 書き込み",
+    "Quota reset times": "クォータのリセット時刻",
+    "Quota checked at": "クォータ確認日時",
+    "Quota check error": "クォータ確認エラー",
+    "Reset grant check error": "リセット権確認エラー",
+    "Source CPA": "所属 CPA"
   }
 }

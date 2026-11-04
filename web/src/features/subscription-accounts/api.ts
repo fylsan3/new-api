@@ -114,9 +114,8 @@ export function setAccountDisabled(ref: AccountRef, disabled: boolean) {
   )
 }
 
-export function refreshAccountToken(ref: AccountRef) {
-  return unwrap(api.post<Envelope<null>>(`${BASE}/account/refresh-token`, ref))
-}
+// Token refresh is left to CPA's background refresher; the card no longer has
+// a button for it. The POST /account/refresh-token endpoint remains available.
 
 export function claimResetGrant(ref: AccountRef) {
   return unwrap(

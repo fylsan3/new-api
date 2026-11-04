@@ -18,7 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, it } from 'vitest'
 
-import { cardUsageOf, lastRequestAt, socksStateOf } from '../lib/card'
+import {
+  cardUsageOf,
+  compactCount,
+  lastRequestAt,
+  socksStateOf,
+} from '../lib/card'
 import {
   buildDollarWindows,
   buildQuotaWindows,
@@ -156,5 +161,15 @@ describe('subscription accounts card helpers', () => {
     expect(
       lastRequestAt({ ...base, credential: { recent_requests: recent } })
     ).toBe(0)
+  })
+
+  it('shortens counts to k / M only from 10,000 on', () => {
+    expect(compactCount(0)).toEqual({ text: '0', compact: false })
+    expect(compactCount(9999)).toEqual({ text: '9999', compact: false })
+    expect(compactCount(10_000)).toEqual({ text: '10k', compact: true })
+    expect(compactCount(12_345)).toEqual({ text: '12.3k', compact: true })
+    expect(compactCount(999_999)).toEqual({ text: '999.9k', compact: true })
+    expect(compactCount(1_250_000)).toEqual({ text: '1.2M', compact: true })
+    expect(compactCount(Number.NaN)).toEqual({ text: '0', compact: false })
   })
 })
