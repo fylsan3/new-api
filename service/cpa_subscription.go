@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -225,12 +226,92 @@ func (c *cpaClient) credentialProxyURL(ctx context.Context, name string) (string
 	return strings.TrimSpace(proxy), nil
 }
 
+// ErrCpaProxyBlocked is returned when an account has no usable SOCKS proxy.
+// CPA falls back to the global proxy or a direct connection in that case,
+// which would expose the server's real IP, so the request is never sent.
+var ErrCpaProxyBlocked = errors.New("blocked: account has no valid socks5/socks5h proxy_url, request not sent")
+
+// ValidateSocksProxyURL accepts only socks5:// or socks5h:// with host and a
+// numeric port in 1-65535, and nothing after the port. Anything else (empty,
+// "direct", "none", http proxies, typos) is rejected because CPA would treat
+// it as global/direct.
+func ValidateSocksProxyURL(raw string) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ErrCpaProxyBlocked
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return ErrCpaProxyBlocked
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "socks5" && scheme != "socks5h" {
+		return ErrCpaProxyBlocked
+	}
+	if parsed.Hostname() == "" || parsed.Opaque != "" || parsed.RawQuery != "" || parsed.Fragment != "" ||
+		(parsed.Path != "" && parsed.Path != "/") {
+		return ErrCpaProxyBlocked
+	}
+	port, err := strconv.Atoi(parsed.Port())
+	if err != nil || port < 1 || port > 65535 {
+		return ErrCpaProxyBlocked
+	}
+	return nil
+}
+
+// socksGuardTTL bounds how long one proxy check may be reused by consecutive
+// calls of the same operation (e.g. usage + profile + grants in one refresh).
+const socksGuardTTL = 60 * time.Second
+
+// socksGuard proves the account's proxy_url was read from CPA and validated
+// recently. apiCall only accepts a guard, so no code path can reach Anthropic
+// without passing the check.
+type socksGuard struct {
+	name      string
+	proxyURL  string
+	checkedAt time.Time
+}
+
+// requireSocksProxy re-reads the credential's proxy_url from CPA right before
+// any request that CPA will forward to Anthropic, so a proxy removed or broken
+// after the last sync is still caught.
+func (c *cpaClient) requireSocksProxy(ctx context.Context, name string) (*socksGuard, error) {
+	proxy, err := c.credentialProxyURL(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateSocksProxyURL(proxy); err != nil {
+		return &socksGuard{name: name, proxyURL: proxy}, err
+	}
+	return &socksGuard{name: name, proxyURL: proxy, checkedAt: time.Now()}, nil
+}
+
+func (c *cpaClient) refreshGuard(ctx context.Context, guard *socksGuard) error {
+	if guard == nil || guard.name == "" {
+		return ErrCpaProxyBlocked
+	}
+	if !guard.checkedAt.IsZero() && time.Since(guard.checkedAt) < socksGuardTTL {
+		return nil
+	}
+	fresh, err := c.requireSocksProxy(ctx, guard.name)
+	if err != nil {
+		return err
+	}
+	*guard = *fresh
+	return nil
+}
+
 type cpaAPICallResult struct {
 	StatusCode int    `json:"status_code"`
 	Body       string `json:"body"`
 }
 
-func (c *cpaClient) apiCall(ctx context.Context, authIndex, method, target string, headers map[string]string, data string) (*cpaAPICallResult, error) {
+// apiCall asks CPA to forward one request to Anthropic using the account's own
+// proxy. It refuses to send unless the account has a valid SOCKS proxy.
+func (c *cpaClient) apiCall(ctx context.Context, guard *socksGuard, authIndex, method, target string, headers map[string]string, data string) (*cpaAPICallResult, error) {
+	if err := c.refreshGuard(ctx, guard); err != nil {
+		return nil, err
+	}
 	payload := map[string]any{
 		"auth_index": authIndex,
 		"method":     method,

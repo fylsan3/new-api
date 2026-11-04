@@ -125,11 +125,13 @@ func RefreshCpaAccount(ctx context.Context, instanceID int, name string) (*CpaAc
 	}
 	authIndex := credentialString(snap.Credential, "auth_index")
 
-	proxy, proxyErr := client.credentialProxyURL(ctx, name)
+	guard, proxyErr := client.requireSocksProxy(ctx, name)
+	if guard != nil {
+		snap.ProxyURL = MaskProxyURL(guard.proxyURL)
+	}
 	if proxyErr != nil {
 		snap.ProxyError = proxyErr.Error()
 	} else {
-		snap.ProxyURL = MaskProxyURL(proxy)
 		snap.ProxyError = ""
 	}
 
@@ -142,7 +144,16 @@ func RefreshCpaAccount(ctx context.Context, instanceID int, name string) (*CpaAc
 
 	now := common.GetTimestamp()
 	snap.QuotaCheckedAt = now
-	usage, status, usageErr := fetchClaudeJSON(ctx, client, authIndex, claudeUsageURL, true)
+	if proxyErr != nil {
+		// No valid SOCKS proxy: do not let CPA reach Anthropic at all.
+		snap.QuotaError = proxyErr.Error()
+		snap.QuotaErrorStatus = 0
+		if err := saveSnapshot(snap); err != nil {
+			return nil, err
+		}
+		return snap, nil
+	}
+	usage, status, usageErr := fetchClaudeJSON(ctx, client, guard, authIndex, claudeUsageURL, true)
 	if usageErr != nil {
 		snap.QuotaError = usageErr.Error()
 		snap.QuotaErrorStatus = status
@@ -151,12 +162,12 @@ func RefreshCpaAccount(ctx context.Context, instanceID int, name string) (*CpaAc
 		snap.QuotaObservedAt = now
 		snap.QuotaError = ""
 		snap.QuotaErrorStatus = 0
-		if profile, _, profileErr := fetchClaudeJSON(ctx, client, authIndex, claudeProfileURL, false); profileErr == nil {
+		if profile, _, profileErr := fetchClaudeJSON(ctx, client, guard, authIndex, claudeProfileURL, false); profileErr == nil {
 			snap.PlanType = resolveClaudePlanType(profile)
 		}
 	}
 
-	grants, _, grantsErr := fetchClaudeJSON(ctx, client, authIndex, claudeAPIOrigin+"/api/oauth/usage?cedar_ember=1&skip_spend=1", false)
+	grants, _, grantsErr := fetchClaudeJSON(ctx, client, guard, authIndex, claudeAPIOrigin+"/api/oauth/usage?cedar_ember=1&skip_spend=1", false)
 	if grantsErr != nil {
 		snap.ResetGrantsError = grantsErr.Error()
 	} else if block, ok := grants["cedar_ember"].(map[string]any); ok {
@@ -173,8 +184,8 @@ func RefreshCpaAccount(ctx context.Context, instanceID int, name string) (*CpaAc
 	return snap, nil
 }
 
-func fetchClaudeJSON(ctx context.Context, client *cpaClient, authIndex, target string, accept bool) (map[string]any, int, error) {
-	result, err := client.apiCall(ctx, authIndex, http.MethodGet, target, claudeRequestHeaders(accept), "")
+func fetchClaudeJSON(ctx context.Context, client *cpaClient, guard *socksGuard, authIndex, target string, accept bool) (map[string]any, int, error) {
+	result, err := client.apiCall(ctx, guard, authIndex, http.MethodGet, target, claudeRequestHeaders(accept), "")
 	if err != nil {
 		return nil, 0, err
 	}
@@ -436,6 +447,11 @@ func RefreshCpaAccountToken(ctx context.Context, instanceID int, name string) er
 	if err != nil {
 		return err
 	}
+	// Token refresh goes to Anthropic through CPA with the account proxy; an
+	// empty or malformed proxy would make CPA connect directly.
+	if _, err := client.requireSocksProxy(ctx, name); err != nil {
+		return err
+	}
 	body := map[string]any{"name": name}
 	if idx := credentialString(snap.Credential, "auth_index"); idx != "" {
 		body["auth_index"] = idx
@@ -585,7 +601,11 @@ func ClaimCpaResetGrant(ctx context.Context, instanceID int, name string) (*CpaR
 	if authIndex == "" {
 		return nil, errors.New("account has no auth_index")
 	}
-	profile, _, err := fetchClaudeJSON(ctx, client, authIndex, claudeProfileURL, false)
+	guard, err := client.requireSocksProxy(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	profile, _, err := fetchClaudeJSON(ctx, client, guard, authIndex, claudeProfileURL, false)
 	if err != nil {
 		return nil, err
 	}
@@ -596,7 +616,7 @@ func ClaimCpaResetGrant(ctx context.Context, instanceID int, name string) (*CpaR
 	}
 	orgUUID = strings.ToLower(orgUUID)
 
-	status, _, err := fetchClaudeJSON(ctx, client, authIndex, claudeAPIOrigin+"/api/oauth/usage?cedar_ember=1&skip_spend=1", false)
+	status, _, err := fetchClaudeJSON(ctx, client, guard, authIndex, claudeAPIOrigin+"/api/oauth/usage?cedar_ember=1&skip_spend=1", false)
 	if err != nil {
 		return nil, err
 	}
@@ -630,7 +650,7 @@ func ClaimCpaResetGrant(ctx context.Context, instanceID int, name string) (*CpaR
 	claimCtx, cancel := context.WithTimeout(ctx, cpaClaimTimeout)
 	defer cancel()
 	target := fmt.Sprintf("%s/api/organizations/%s/reset_rate_limits", claudeAPIOrigin, orgUUID)
-	result, callErr := client.apiCall(claimCtx, authIndex, http.MethodPost, target, claudeRequestHeaders(false), string(payload))
+	result, callErr := client.apiCall(claimCtx, guard, authIndex, http.MethodPost, target, claudeRequestHeaders(false), string(payload))
 
 	settled := ""
 	if callErr == nil {
