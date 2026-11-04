@@ -60,7 +60,7 @@
 - 鼠标停在卡片上 **0.3 秒**，右侧弹出**详情框**（`components/account-details.tsx`）：文件名、所属 CPA、状态、代理（打码）、上次刷新 token、最近请求、成功/失败、**近 30 天 token 分项**（输入 / 输出 / 缓存读写，来自 `/stats?days=30`）、消费、各额度重置时间，以及额外用量 / 美元余额等（有才显示）。
 - SOCKS 徽章**不再悬停弹框**（地址已在详情框），点击仍可查看完整地址并复制。
 - 成功 / 失败数 **≥ 10,000 显示 k / M**（截断不四舍五入），带虚线下划线，悬停显示精确数字。
-- 查看完整 SOCKS 地址时，若该 CPA 未保存管理密钥，提示「CPA management key is not saved…」（原报 `unsupported secret format`）。
+- 查看完整 SOCKS 地址时，若该 CPA 未保存管理密钥，提示「该 CPA 未保存管理密钥，请编辑该 CPA 重新填写管理密钥」（原报 `unsupported secret format`；2026-11-04 由英文改为中文）。
 
 ### 5. 刷新机制
 

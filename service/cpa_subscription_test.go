@@ -32,7 +32,7 @@ func TestCpaSecretRoundTrip(t *testing.T) {
 
 	_, err = DecryptCpaSecret("")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not saved")
+	assert.Contains(t, err.Error(), "未保存管理密钥")
 }
 
 func TestNormalizeCpaBaseURL(t *testing.T) {
