@@ -69,6 +69,7 @@ type FlowNodeRank = {
 
 type FlowPathContext = {
   deletedTokenLabel?: (tokenId: number) => string
+  unknownCpaAccountLabel?: string
 }
 
 type FlowGraphOptions = {
@@ -111,6 +112,7 @@ const FLOW_NODE_KINDS: readonly FlowNodeKind[] = [
   'group',
   'model',
   'channel',
+  'cpa_account',
 ]
 const FLOW_NODE_KIND_SET = new Set<FlowNodeKind>(FLOW_NODE_KINDS)
 
@@ -121,6 +123,7 @@ const OTHER_FLOW_NODE_IDS: Record<FlowNodeKind, string> = {
   group: 'group:__other__',
   model: 'model:__other__',
   channel: 'channel:__other__',
+  cpa_account: 'cpa_account:__other__',
 }
 
 const DEFAULT_OTHER_FLOW_NODE_LABELS: Record<FlowNodeKind, string> = {
@@ -130,6 +133,7 @@ const DEFAULT_OTHER_FLOW_NODE_LABELS: Record<FlowNodeKind, string> = {
   group: 'Other groups',
   model: 'Other models',
   channel: 'Other channels',
+  cpa_account: 'Other CPA accounts',
 }
 
 // Kinds whose labels can leak identity (people, keys, infra, business setup).
@@ -140,6 +144,7 @@ const SENSITIVE_FLOW_KINDS = new Set<FlowNodeKind>([
   'token',
   'group',
   'channel',
+  'cpa_account',
 ])
 
 const OTHER_FLOW_NODE_ID_SET = new Set<string>(
@@ -235,6 +240,34 @@ function channelNode(row: FlowQuotaDataItem): FlowPathNode {
   }
 }
 
+// Backend marker for CPA traffic whose account cannot be estimated (usage
+// collection off or no data yet). Mirrors service.CpaAccountUnknown.
+const UNKNOWN_CPA_ACCOUNT = '__unknown__'
+
+function cpaAccountNode(
+  row: FlowQuotaDataItem,
+  ctx: FlowPathContext
+): FlowPathNode {
+  const account = row.cpa_account || UNKNOWN_CPA_ACCOUNT
+  const unknown = account === UNKNOWN_CPA_ACCOUNT
+  return {
+    id: `cpa_account:${account}`,
+    label: unknown
+      ? (ctx.unknownCpaAccountLabel ?? 'Unknown CPA account')
+      : account,
+    kind: 'cpa_account',
+  }
+}
+
+// Only rows served by a CPA channel carry a CPA account; every other row ends
+// its path at the channel column instead of inventing a placeholder node.
+function stageAppliesToRow(
+  stage: FlowNodeKind,
+  row: FlowQuotaDataItem
+): boolean {
+  return stage !== 'cpa_account' || Boolean(row.cpa_account)
+}
+
 const NODE_BUILDERS: Record<
   FlowNodeKind,
   (row: FlowQuotaDataItem, ctx: FlowPathContext) => FlowPathNode
@@ -245,10 +278,11 @@ const NODE_BUILDERS: Record<
   group: groupNode,
   model: modelNode,
   channel: channelNode,
+  cpa_account: cpaAccountNode,
 }
 
 const ROLE_FLOW_STAGES: Record<FlowRole, FlowNodeKind[]> = {
-  root: ['user', 'node', 'token', 'group', 'model', 'channel'],
+  root: ['user', 'node', 'token', 'group', 'model', 'channel', 'cpa_account'],
   admin: ['user', 'group', 'model', 'channel'],
   user: ['token', 'group', 'model'],
 }
@@ -277,7 +311,9 @@ function flowPathForStages(
   stages: FlowNodeKind[],
   ctx: FlowPathContext = EMPTY_FLOW_PATH_CONTEXT
 ): FlowPathNode[] {
-  return stages.map((stage) => NODE_BUILDERS[stage](row, ctx))
+  return stages
+    .filter((stage) => stageAppliesToRow(stage, row))
+    .map((stage) => NODE_BUILDERS[stage](row, ctx))
 }
 
 function colorAt(index: number, palette?: readonly string[]): string {
@@ -921,6 +957,7 @@ function buildNodeFilterOptions(
     )
 
     for (const row of candidateRows) {
+      if (!stageAppliesToRow(stage, row)) continue
       const metrics = rowMetrics(row)
       const value = metricValue(metrics, metric)
       const node = NODE_BUILDERS[stage](row, ctx)
@@ -982,6 +1019,7 @@ export function buildDashboardFlowData(
   const palette = options.colorPalette
   const ctx = {
     deletedTokenLabel: options.deletedTokenLabel,
+    unknownCpaAccountLabel: options.unknownCpaAccountLabel,
   }
   const stages = resolveVisibleStages(role, options.visibleStages)
   const userFilteredRows = filterRows(rows, options)

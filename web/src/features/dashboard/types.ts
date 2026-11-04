@@ -44,6 +44,8 @@ export interface FlowQuotaDataItem {
   token_name?: string
   channel_id?: number
   channel_name?: string
+  // Root only: estimated CPA account behind a CPA channel ("" = not CPA).
+  cpa_account?: string
   model_name?: string
   token_used?: number
   count?: number
@@ -63,6 +65,8 @@ export type FlowNodeKind =
   | 'group'
   | 'model'
   | 'channel'
+  // Root only: the CPA account behind a CPA channel (estimated split).
+  | 'cpa_account'
 
 export interface FlowNodeFilter {
   kind: FlowNodeKind
@@ -91,6 +95,8 @@ export interface FlowBuildOptions {
   // Resolves the label for a token whose record no longer exists (deleted).
   // Lets the caller inject a localized string such as "Deleted (123)".
   deletedTokenLabel?: (tokenId: number) => string
+  // Label for CPA traffic whose account could not be estimated.
+  unknownCpaAccountLabel?: string
   otherNodeLabel?: (kind: FlowNodeKind) => string
 }
 
@@ -191,6 +197,9 @@ export interface DashboardFilters {
   end_timestamp?: Date
   time_granularity?: TimeGranularity
   username?: string
+  // Admin only: "" = all channels, "cpa" = channels mapped to a CPA,
+  // otherwise comma separated channel IDs.
+  channel?: string
 }
 
 export type ConsumptionDistributionChartType = 'bar' | 'area'

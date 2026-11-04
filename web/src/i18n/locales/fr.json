@@ -7514,6 +7514,15 @@
     "{{count}} end first on {{date}}": "{{count}} expirent en premier le {{date}}",
     "{{n}} account(s) without official price": "{{n}} compte(s) sans prix officiel",
     "{{n}} days": "{{n}} jours",
-    "{{n}} requests have no price and are not counted": "{{n}} requêtes sans prix, non comptées"
+    "{{n}} requests have no price and are not counted": "{{n}} requêtes sans prix, non comptées",
+    "CPA channels only": "Canaux CPA uniquement",
+    "Channel IDs, comma separated": "ID de canaux, séparés par des virgules",
+    "Leave empty for all channels. \"CPA channels only\" keeps traffic forwarded to a registered CPA.": "Laisser vide pour tous les canaux. « Canaux CPA uniquement » ne garde que le trafic transmis à un CPA enregistré.",
+    "CPA account": "Compte CPA",
+    "Estimated CPA account behind a CPA channel, split by each account token share in CPA usage": "Compte CPA estimé derrière un canal CPA, réparti selon la part de jetons de chaque compte dans l’usage CPA",
+    "Other CPA accounts": "Autres comptes CPA",
+    "Unknown CPA account": "Compte CPA inconnu",
+    "Error rate (24h)": "Taux d’erreur (24 h)",
+    "Site-wide relay requests": "Requêtes relayées (tout le site)"
   }
 }

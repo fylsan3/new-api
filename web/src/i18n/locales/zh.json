@@ -7514,6 +7514,15 @@
     "{{count}} end first on {{date}}": "{{count}} 个最早于 {{date}} 到期",
     "{{n}} account(s) without official price": "{{n}} 个账号无官方价",
     "{{n}} days": "{{n}} 天",
-    "{{n}} requests have no price and are not counted": "{{n}} 个请求无价格，未计入"
+    "{{n}} requests have no price and are not counted": "{{n}} 个请求无价格，未计入",
+    "CPA channels only": "仅 CPA 渠道",
+    "Channel IDs, comma separated": "渠道 ID，多个用逗号分隔",
+    "Leave empty for all channels. \"CPA channels only\" keeps traffic forwarded to a registered CPA.": "留空表示全部渠道。「仅 CPA 渠道」只看转发到已登记 CPA 的流量。",
+    "CPA account": "CPA 账号",
+    "Estimated CPA account behind a CPA channel, split by each account token share in CPA usage": "CPA 渠道背后的账号（估算）：按 CPA 用量中各账号的 token 占比拆分",
+    "Other CPA accounts": "其他 CPA 账号",
+    "Unknown CPA account": "未知 CPA 账号",
+    "Error rate (24h)": "错误率（24 小时）",
+    "Site-wide relay requests": "全站转发请求"
   }
 }

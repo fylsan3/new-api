@@ -40,6 +40,7 @@ export async function getUserQuotaDates(
     end_timestamp: number
     default_time?: string
     username?: string
+    channel?: string
   },
   isAdmin = false
 ) {
@@ -72,6 +73,7 @@ export async function getFlowQuotaDates(
     end_timestamp: number
     default_time?: string
     username?: string
+    channel?: string
   },
   isAdmin = false
 ) {

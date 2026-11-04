@@ -37,8 +37,9 @@ const (
 	cpaPruneInterval       = 6 * time.Hour
 
 	// cpaProxyFailDisableThreshold: consecutive SOCKS failures before the
-	// account is disabled in CPA (user decision: 2).
-	cpaProxyFailDisableThreshold = 2
+	// account is disabled in CPA. User decision (2026-11-04): disable on the
+	// very first SOCKS failure, account safety outranks availability.
+	cpaProxyFailDisableThreshold = 1
 
 	CpaAlertKindSocksDisabled   = "socks_auto_disabled"
 	CpaAlertKindSocksDisableErr = "socks_auto_disable_failed"
@@ -384,17 +385,26 @@ func trackCpaProxyHealth(snap *CpaAccountSnapshot, proxyErr error) {
 	if snap.ProxyFailStreak < cpaProxyFailDisableThreshold || credentialBool(snap.Credential, "disabled") {
 		return
 	}
+	// No in-flight guard on purpose: if a previous disable call failed, every
+	// later SOCKS failure retries it. Disabling is idempotent and alerts are
+	// de-duplicated by RaiseCpaAlert.
 	instanceID, name, streak, reason := snap.InstanceID, snap.Name, snap.ProxyFailStreak, proxyErr.Error()
 	snap.AutoDisabledAt = common.GetTimestamp()
+	cpaAutoDisableAccount(instanceID, name, streak, reason)
+}
+
+// cpaAutoDisableAccount disables the account in CPA and raises an alert. It
+// runs async; tests replace it to avoid touching CPA and the database.
+var cpaAutoDisableAccount = func(instanceID int, name string, streak int, reason string) {
 	gopool.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		msg := fmt.Sprintf("SOCKS failed %d times in a row (%s); account disabled in CPA", streak, truncateText(reason, 300))
+		msg := fmt.Sprintf("SOCKS failure (%s), streak %d; account disabled in CPA", truncateText(reason, 300), streak)
 		kind := CpaAlertKindSocksDisabled
 		if err := SetCpaAccountDisabled(ctx, instanceID, name, true); err != nil {
 			kind = CpaAlertKindSocksDisableErr
-			msg = fmt.Sprintf("SOCKS failed %d times in a row (%s); auto-disable failed: %s",
-				streak, truncateText(reason, 200), truncateText(err.Error(), 200))
+			msg = fmt.Sprintf("SOCKS failure (%s), streak %d; auto-disable failed: %s",
+				truncateText(reason, 200), streak, truncateText(err.Error(), 200))
 		}
 		if err := model.RaiseCpaAlert(instanceID, name, kind, msg); err != nil {
 			common.SysError("cpa alert save failed: " + err.Error())

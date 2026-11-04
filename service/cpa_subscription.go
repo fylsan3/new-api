@@ -384,22 +384,22 @@ func filterCredential(raw map[string]any) map[string]any {
 
 // CpaAccountSnapshot is the cached, browser-safe view of one credential.
 type CpaAccountSnapshot struct {
-	InstanceID       int            `json:"instance_id"`
-	Name             string         `json:"name"`
-	Credential       map[string]any `json:"credential"`
+	InstanceID int            `json:"instance_id"`
+	Name       string         `json:"name"`
+	Credential map[string]any `json:"credential"`
 	// CredentialSyncedAt is when Credential (incl. recent_requests) was read.
-	CredentialSyncedAt int64        `json:"credential_synced_at,omitempty"`
-	ProxyURL         string         `json:"proxy_url"`
-	ProxyError       string         `json:"proxy_error,omitempty"`
-	IsClaude         bool           `json:"is_claude"`
-	Usage            map[string]any `json:"usage,omitempty"`
-	PlanType         string         `json:"plan_type,omitempty"`
-	QuotaObservedAt  int64          `json:"quota_observed_at,omitempty"`
-	QuotaCheckedAt   int64          `json:"quota_checked_at,omitempty"`
-	QuotaError       string         `json:"quota_error,omitempty"`
-	QuotaErrorStatus int            `json:"quota_error_status,omitempty"`
-	ResetGrants      map[string]any `json:"reset_grants,omitempty"`
-	ResetGrantsError string         `json:"reset_grants_error,omitempty"`
+	CredentialSyncedAt int64          `json:"credential_synced_at,omitempty"`
+	ProxyURL           string         `json:"proxy_url"`
+	ProxyError         string         `json:"proxy_error,omitempty"`
+	IsClaude           bool           `json:"is_claude"`
+	Usage              map[string]any `json:"usage,omitempty"`
+	PlanType           string         `json:"plan_type,omitempty"`
+	QuotaObservedAt    int64          `json:"quota_observed_at,omitempty"`
+	QuotaCheckedAt     int64          `json:"quota_checked_at,omitempty"`
+	QuotaError         string         `json:"quota_error,omitempty"`
+	QuotaErrorStatus   int            `json:"quota_error_status,omitempty"`
+	ResetGrants        map[string]any `json:"reset_grants,omitempty"`
+	ResetGrantsError   string         `json:"reset_grants_error,omitempty"`
 	// ProxyFailStreak counts consecutive refreshes that failed on the SOCKS
 	// proxy; at cpaProxyFailDisableThreshold the account is disabled.
 	ProxyFailStreak int   `json:"proxy_fail_streak,omitempty"`

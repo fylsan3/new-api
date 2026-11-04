@@ -7514,6 +7514,15 @@
     "{{count}} end first on {{date}}": "{{count}} 件が {{date}} に最初に期限",
     "{{n}} account(s) without official price": "公式価格のないアカウント {{n}} 件",
     "{{n}} days": "{{n}} 日",
-    "{{n}} requests have no price and are not counted": "価格のない {{n}} 件のリクエストは集計外"
+    "{{n}} requests have no price and are not counted": "価格のない {{n}} 件のリクエストは集計外",
+    "CPA channels only": "CPA チャネルのみ",
+    "Channel IDs, comma separated": "チャネル ID（カンマ区切り）",
+    "Leave empty for all channels. \"CPA channels only\" keeps traffic forwarded to a registered CPA.": "空欄はすべてのチャネル。「CPA チャネルのみ」は登録済み CPA へ転送されたトラフィックだけを表示します。",
+    "CPA account": "CPA アカウント",
+    "Estimated CPA account behind a CPA channel, split by each account token share in CPA usage": "CPA チャネルの背後にあるアカウント（推定）。CPA 使用量での各アカウントのトークン比率で按分",
+    "Other CPA accounts": "その他の CPA アカウント",
+    "Unknown CPA account": "不明な CPA アカウント",
+    "Error rate (24h)": "エラー率（24 時間）",
+    "Site-wide relay requests": "サイト全体のリレーリクエスト"
   }
 }

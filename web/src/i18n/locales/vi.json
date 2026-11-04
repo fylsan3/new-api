@@ -7514,6 +7514,15 @@
     "{{count}} end first on {{date}}": "{{count}} hết hạn sớm nhất vào {{date}}",
     "{{n}} account(s) without official price": "{{n}} tài khoản không có giá chính thức",
     "{{n}} days": "{{n}} ngày",
-    "{{n}} requests have no price and are not counted": "{{n}} yêu cầu không có giá, không được tính"
+    "{{n}} requests have no price and are not counted": "{{n}} yêu cầu không có giá, không được tính",
+    "CPA channels only": "Chỉ kênh CPA",
+    "Channel IDs, comma separated": "ID kênh, phân tách bằng dấu phẩy",
+    "Leave empty for all channels. \"CPA channels only\" keeps traffic forwarded to a registered CPA.": "Để trống để xem mọi kênh. \"Chỉ kênh CPA\" chỉ giữ lưu lượng chuyển tới CPA đã đăng ký.",
+    "CPA account": "Tài khoản CPA",
+    "Estimated CPA account behind a CPA channel, split by each account token share in CPA usage": "Tài khoản CPA ước tính phía sau kênh CPA, chia theo tỷ lệ token của từng tài khoản trong mức dùng CPA",
+    "Other CPA accounts": "Tài khoản CPA khác",
+    "Unknown CPA account": "Tài khoản CPA không xác định",
+    "Error rate (24h)": "Tỷ lệ lỗi (24 giờ)",
+    "Site-wide relay requests": "Yêu cầu chuyển tiếp toàn trang"
   }
 }

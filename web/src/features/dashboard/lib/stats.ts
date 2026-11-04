@@ -61,3 +61,13 @@ export function calculateDashboardStats(data: QuotaDataItem[]) {
     }
   )
 }
+
+// Error rate = 100 - success rate of perf metrics (site wide, relay requests
+// only; business rejections and client cancellations are not counted).
+// Returns NaN when there is no sample so the UI renders a dash.
+export function errorRateFromSuccessRate(successRate?: number | null): number {
+  if (typeof successRate !== 'number' || !Number.isFinite(successRate)) {
+    return Number.NaN
+  }
+  return Math.min(100, Math.max(0, 100 - successRate))
+}

@@ -154,6 +154,11 @@ const FLOW_STAGE_META: Record<
     labelKey: 'Channel',
     descKey: 'The upstream channel that served the requests',
   },
+  cpa_account: {
+    labelKey: 'CPA account',
+    descKey:
+      'Estimated CPA account behind a CPA channel, split by each account token share in CPA usage',
+  },
 }
 
 const FLOW_STAGE_LABEL_KEYS: Record<FlowNodeKind, string> = {
@@ -163,6 +168,7 @@ const FLOW_STAGE_LABEL_KEYS: Record<FlowNodeKind, string> = {
   group: FLOW_STAGE_META.group.labelKey,
   model: FLOW_STAGE_META.model.labelKey,
   channel: FLOW_STAGE_META.channel.labelKey,
+  cpa_account: FLOW_STAGE_META.cpa_account.labelKey,
 }
 
 const FLOW_OTHER_NODE_LABEL_KEYS: Record<FlowNodeKind, string> = {
@@ -172,6 +178,7 @@ const FLOW_OTHER_NODE_LABEL_KEYS: Record<FlowNodeKind, string> = {
   group: 'Other groups',
   model: 'Other models',
   channel: 'Other channels',
+  cpa_account: 'Other CPA accounts',
 }
 
 type FlowChartPointerEvent = EventParamsDefinition['pointerdown']
@@ -360,6 +367,7 @@ export function FlowCharts(props: FlowChartsProps) {
         overflowMode,
         maskSensitive,
         deletedTokenLabel: (tokenId) => t('Deleted ({{id}})', { id: tokenId }),
+        unknownCpaAccountLabel: t('Unknown CPA account'),
         otherNodeLabel: (kind) => t(FLOW_OTHER_NODE_LABEL_KEYS[kind]),
       }),
     [

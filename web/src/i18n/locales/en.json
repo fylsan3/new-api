@@ -7514,6 +7514,15 @@
     "{{count}} end first on {{date}}": "{{count}} end first on {{date}}",
     "{{n}} account(s) without official price": "{{n}} account(s) without official price",
     "{{n}} days": "{{n}} days",
-    "{{n}} requests have no price and are not counted": "{{n}} requests have no price and are not counted"
+    "{{n}} requests have no price and are not counted": "{{n}} requests have no price and are not counted",
+    "CPA channels only": "CPA channels only",
+    "Channel IDs, comma separated": "Channel IDs, comma separated",
+    "Leave empty for all channels. \"CPA channels only\" keeps traffic forwarded to a registered CPA.": "Leave empty for all channels. \"CPA channels only\" keeps traffic forwarded to a registered CPA.",
+    "CPA account": "CPA account",
+    "Estimated CPA account behind a CPA channel, split by each account token share in CPA usage": "Estimated CPA account behind a CPA channel, split by each account token share in CPA usage",
+    "Other CPA accounts": "Other CPA accounts",
+    "Unknown CPA account": "Unknown CPA account",
+    "Error rate (24h)": "Error rate (24h)",
+    "Site-wide relay requests": "Site-wide relay requests"
   }
 }

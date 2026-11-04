@@ -7514,6 +7514,15 @@
     "{{count}} end first on {{date}}": "{{count}} истекают первыми {{date}}",
     "{{n}} account(s) without official price": "Аккаунтов без официальной цены: {{n}}",
     "{{n}} days": "{{n}} дн.",
-    "{{n}} requests have no price and are not counted": "{{n}} запросов без цены не учтены"
+    "{{n}} requests have no price and are not counted": "{{n}} запросов без цены не учтены",
+    "CPA channels only": "Только каналы CPA",
+    "Channel IDs, comma separated": "ID каналов через запятую",
+    "Leave empty for all channels. \"CPA channels only\" keeps traffic forwarded to a registered CPA.": "Пусто — все каналы. «Только каналы CPA» оставляет трафик, переданный в зарегистрированный CPA.",
+    "CPA account": "Аккаунт CPA",
+    "Estimated CPA account behind a CPA channel, split by each account token share in CPA usage": "Оценка аккаунта CPA за каналом CPA: разбивка по доле токенов каждого аккаунта в статистике CPA",
+    "Other CPA accounts": "Другие аккаунты CPA",
+    "Unknown CPA account": "Неизвестный аккаунт CPA",
+    "Error rate (24h)": "Доля ошибок (24 ч)",
+    "Site-wide relay requests": "Все ретранслируемые запросы сайта"
   }
 }

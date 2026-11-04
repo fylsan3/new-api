@@ -297,6 +297,43 @@ export function ModelsFilter(props: ModelsFilterProps) {
                   onChange={(e) => handleChange('username', e.target.value)}
                 />
               </div>
+
+              <div className='grid gap-2'>
+                <Label htmlFor='channel'>{t('Channel')}</Label>
+                <div className='flex gap-2'>
+                  <Input
+                    id='channel'
+                    placeholder={t('Channel IDs, comma separated')}
+                    value={filters.channel ?? ''}
+                    onChange={(e) => handleChange('channel', e.target.value)}
+                  />
+                  <Button
+                    type='button'
+                    size='sm'
+                    className='h-9 shrink-0'
+                    variant={
+                      filters.channel?.trim().toLowerCase() === 'cpa'
+                        ? 'default'
+                        : 'outline'
+                    }
+                    onClick={() =>
+                      handleChange(
+                        'channel',
+                        filters.channel?.trim().toLowerCase() === 'cpa'
+                          ? ''
+                          : 'cpa'
+                      )
+                    }
+                  >
+                    {t('CPA channels only')}
+                  </Button>
+                </div>
+                <p className='text-muted-foreground text-xs'>
+                  {t(
+                    'Leave empty for all channels. "CPA channels only" keeps traffic forwarded to a registered CPA.'
+                  )}
+                </p>
+              </div>
             </>
           )}
         </div>

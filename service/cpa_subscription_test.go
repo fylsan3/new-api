@@ -167,6 +167,11 @@ func TestIsCpaProxyFailure(t *testing.T) {
 }
 
 func TestTrackCpaProxyHealthStreak(t *testing.T) {
+	disableCalls := 0
+	origDisable := cpaAutoDisableAccount
+	cpaAutoDisableAccount = func(int, string, int, string) { disableCalls++ }
+	t.Cleanup(func() { cpaAutoDisableAccount = origDisable })
+
 	badGateway := &cpaHTTPError{Status: http.StatusBadGateway, Message: "request failed"}
 	snap := &CpaAccountSnapshot{InstanceID: 1, Name: "a", Credential: map[string]any{}}
 	// A missing proxy never counts, however often it is seen.
@@ -175,22 +180,32 @@ func TestTrackCpaProxyHealthStreak(t *testing.T) {
 	assert.Equal(t, 0, snap.ProxyFailStreak)
 	assert.Zero(t, snap.AutoDisabledAt)
 
+	// Errors unrelated to the proxy never count.
+	trackCpaProxyHealth(snap, &cpaHTTPError{Status: http.StatusUnauthorized})
+	assert.Equal(t, 0, snap.ProxyFailStreak)
+	assert.Zero(t, snap.AutoDisabledAt)
+
+	// The very first SOCKS failure disables the account.
 	trackCpaProxyHealth(snap, badGateway)
 	assert.Equal(t, 1, snap.ProxyFailStreak)
-	assert.Zero(t, snap.AutoDisabledAt, "one failure must not disable")
+	assert.NotZero(t, snap.AutoDisabledAt, "first SOCKS failure must disable")
+	assert.Equal(t, 1, disableCalls)
 
-	// Errors unrelated to the proxy keep the streak as is.
-	trackCpaProxyHealth(snap, &cpaHTTPError{Status: http.StatusUnauthorized})
-	assert.Equal(t, 1, snap.ProxyFailStreak)
+	// Still not disabled in CPA (e.g. the previous disable call failed):
+	// every further SOCKS failure retries the disable.
+	trackCpaProxyHealth(snap, badGateway)
+	assert.Equal(t, 2, disableCalls)
 
 	trackCpaProxyHealth(snap, nil)
 	assert.Equal(t, 0, snap.ProxyFailStreak)
+	assert.Zero(t, snap.AutoDisabledAt)
 
 	// Already disabled accounts are counted but never disabled again.
 	disabled := &CpaAccountSnapshot{Credential: map[string]any{"disabled": true}, ProxyFailStreak: 5}
 	trackCpaProxyHealth(disabled, badGateway)
 	assert.Equal(t, 6, disabled.ProxyFailStreak)
 	assert.Zero(t, disabled.AutoDisabledAt)
+	assert.Equal(t, 2, disableCalls)
 }
 
 func TestAggregateCpaUsage(t *testing.T) {

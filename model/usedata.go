@@ -148,15 +148,32 @@ func increaseQuotaData(quotaData *QuotaData) {
 	}
 }
 
-func GetQuotaDataByUsername(username string, startTime int64, endTime int64) (quotaData []*QuotaData, err error) {
+func GetQuotaDataByUsername(username string, startTime int64, endTime int64, channelIDs ...[]int) (quotaData []*QuotaData, err error) {
 	var quotaDatas []*QuotaData
 	// 从quota_data表中查询数据
-	err = DB.Table("quota_data").
+	query := DB.Table("quota_data").
 		Select("user_id, username, model_name, created_at, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used, sum(cache_read_tokens) as cache_read_tokens, sum(cache_creation_tokens) as cache_creation_tokens").
-		Where("username = ? and created_at >= ? and created_at <= ?", username, startTime, endTime).
-		Group("user_id, username, model_name, created_at").
-		Find(&quotaDatas).Error
+		Where("username = ? and created_at >= ? and created_at <= ?", username, startTime, endTime)
+	query, empty := applyQuotaChannelFilter(query, channelIDs...)
+	if empty {
+		return []*QuotaData{}, nil
+	}
+	err = query.Group("user_id, username, model_name, created_at").Find(&quotaDatas).Error
 	return quotaDatas, err
+}
+
+// applyQuotaChannelFilter narrows a quota_data query to the given channels.
+// No argument or a nil slice means "all channels"; a non-nil empty slice
+// means a filter that matches nothing (e.g. "CPA channels" with none mapped),
+// reported through the second return value so callers skip the query.
+func applyQuotaChannelFilter(query *gorm.DB, channelIDs ...[]int) (*gorm.DB, bool) {
+	if len(channelIDs) == 0 || channelIDs[0] == nil {
+		return query, false
+	}
+	if len(channelIDs[0]) == 0 {
+		return query, true
+	}
+	return query.Where("channel_id IN ?", channelIDs[0]), false
 }
 
 func GetQuotaDataByUserId(userId int, startTime int64, endTime int64) (quotaData []*QuotaData, err error) {
@@ -180,14 +197,21 @@ func GetQuotaDataGroupByUser(startTime int64, endTime int64) (quotaData []*Quota
 	return quotaDatas, err
 }
 
-func GetAllQuotaDates(startTime int64, endTime int64, username string) (quotaData []*QuotaData, err error) {
+// GetAllQuotaDates returns model usage buckets. channelIDs is optional: nil
+// keeps every channel, a non-nil slice restricts to those channels.
+func GetAllQuotaDates(startTime int64, endTime int64, username string, channelIDs ...[]int) (quotaData []*QuotaData, err error) {
 	if username != "" {
-		return GetQuotaDataByUsername(username, startTime, endTime)
+		return GetQuotaDataByUsername(username, startTime, endTime, channelIDs...)
 	}
 	var quotaDatas []*QuotaData
 	// 从quota_data表中查询数据
 	// only select model_name, sum(count) as count, sum(quota) as quota, model_name, created_at from quota_data group by model_name, created_at;
 	//err = DB.Table("quota_data").Where("created_at >= ? and created_at <= ?", startTime, endTime).Find(&quotaDatas).Error
-	err = DB.Table("quota_data").Select("model_name, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used, sum(cache_read_tokens) as cache_read_tokens, sum(cache_creation_tokens) as cache_creation_tokens, created_at").Where("created_at >= ? and created_at <= ?", startTime, endTime).Group("model_name, created_at").Find(&quotaDatas).Error
+	query := DB.Table("quota_data").Select("model_name, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used, sum(cache_read_tokens) as cache_read_tokens, sum(cache_creation_tokens) as cache_creation_tokens, created_at").Where("created_at >= ? and created_at <= ?", startTime, endTime)
+	query, empty := applyQuotaChannelFilter(query, channelIDs...)
+	if empty {
+		return []*QuotaData{}, nil
+	}
+	err = query.Group("model_name, created_at").Find(&quotaDatas).Error
 	return quotaDatas, err
 }

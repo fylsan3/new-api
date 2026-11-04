@@ -26,10 +26,14 @@ import { StaggerContainer, StaggerItem } from '@/components/page-transition'
 import { Button } from '@/components/ui/button'
 import { getUserQuotaDates } from '@/features/dashboard/api'
 import { useSummaryCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
+import { errorRateFromSuccessRate } from '@/features/dashboard/lib/stats'
 import type { QuotaDataItem } from '@/features/dashboard/types'
+import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
+import { formatUptimePct } from '@/features/performance-metrics/lib/format'
 import { useStatus } from '@/hooks/use-status'
 import { getCurrencyLabel, isCurrencyDisplayEnabled } from '@/lib/currency'
 import { formatNumber, formatQuota } from '@/lib/format'
+import { ROLE } from '@/lib/roles'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { computeTimeRange } from '@/lib/time'
 import { cn } from '@/lib/utils'
@@ -38,6 +42,9 @@ import { useAuthStore } from '@/stores/auth-store'
 import { StatCard } from '../ui/stat-card'
 
 const SUMMARY_SPARKLINE_BUCKETS = 12
+
+// Same window as the performance health panel, so the two numbers agree.
+const ERROR_RATE_WINDOW_HOURS = 24
 
 type SummarySparklineKey = 'balance' | 'usage' | 'requests'
 
@@ -141,6 +148,7 @@ export function SummaryCards() {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
   const { status, loading } = useStatus()
+  const isAdmin = Boolean(user?.role && user.role >= ROLE.ADMIN)
 
   const summaryTimeRange = useMemo(() => computeTimeRange(1), [])
   const remainQuota = Number(user?.quota ?? 0)
@@ -165,6 +173,20 @@ export function SummaryCards() {
       ),
     staleTime: 60 * 1000,
   })
+
+  // Shares its cache key with PerformanceHealthPanel, so no extra request.
+  const perfQuery = useQuery({
+    queryKey: ['perf-metrics-summary', ERROR_RATE_WINDOW_HOURS],
+    queryFn: async () =>
+      requireServerSuccess(
+        await getPerfMetricsSummary(ERROR_RATE_WINDOW_HOURS)
+      ),
+    staleTime: 60 * 1000,
+    retry: false,
+    enabled: isAdmin,
+  })
+  const successRate = perfQuery.data?.data.summary?.success_rate
+  const errorRate = errorRateFromSuccessRate(successRate)
 
   const summaryValues = useMemo(() => {
     return {
@@ -234,8 +256,12 @@ export function SummaryCards() {
     todayUsageDisplay,
     currencyEnabled,
     currencyLabel,
+    errorRateDisplay: isAdmin ? formatUptimePct(errorRate) : undefined,
+    successRateDisplay: formatUptimePct(
+      typeof successRate === 'number' ? successRate : Number.NaN
+    ),
   }).map((config, index) => {
-    const tones = ['accent-1', 'accent-2', 'accent-3'] as const
+    const tones = ['accent-1', 'accent-2', 'accent-3', 'accent-1'] as const
 
     return {
       key: config.key,
@@ -266,7 +292,12 @@ export function SummaryCards() {
               </p>
             </div>
           </div>
-          <StaggerContainer className='grid grid-cols-3 gap-1.5 sm:gap-3'>
+          <StaggerContainer
+            className={cn(
+              'grid gap-1.5 sm:gap-3',
+              items.length > 3 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'
+            )}
+          >
             {items.map((it) => (
               <StaggerItem
                 key={it.key}
@@ -280,7 +311,10 @@ export function SummaryCards() {
                   tone={it.tone}
                   sparkline={it.sparkline}
                   sparklineVariant={it.sparklineVariant}
-                  loading={loading}
+                  loading={
+                    it.key === 'errorRate' ? perfQuery.isLoading : loading
+                  }
+                  error={it.key === 'errorRate' && perfQuery.isError}
                   compactMobile
                 />
               </StaggerItem>

@@ -27,6 +27,7 @@ import {
   Flame,
   TrendingUp,
   Activity,
+  ShieldAlert,
   type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -114,10 +115,13 @@ export function useSummaryCardsConfig(totals: {
   requestCountDisplay: string
   currencyLabel: string
   currencyEnabled: boolean
+  // Admin only; undefined hides the card.
+  errorRateDisplay?: string
+  successRateDisplay?: string
 }) {
   const { t } = useTranslation()
 
-  return [
+  const cards = [
     {
       key: 'todayUsage',
       title: t('Last 24h usage'),
@@ -142,6 +146,17 @@ export function useSummaryCardsConfig(totals: {
       value: totals.requestCountDisplay,
       description: t('Total requests made'),
       icon: Activity,
+    },
+  ]
+  if (totals.errorRateDisplay === undefined) return cards
+  return [
+    ...cards,
+    {
+      key: 'errorRate',
+      title: t('Error rate (24h)'),
+      value: totals.errorRateDisplay,
+      description: `${t('Site-wide relay requests')} · ${t('Success rate')} ${totals.successRateDisplay ?? '—'}`,
+      icon: ShieldAlert,
     },
   ]
 }

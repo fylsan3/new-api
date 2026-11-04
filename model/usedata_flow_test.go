@@ -191,3 +191,42 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 	require.Equal(t, "default", rows[1].UseGroup)
 	require.Equal(t, 25, rows[1].Quota)
 }
+
+func TestQuotaDataChannelFilter(t *testing.T) {
+	truncateTables(t)
+	seedFlowLookupData(t)
+	for _, row := range []QuotaData{
+		{UserID: 1, Username: "alice", UseGroup: "vip", ModelName: "m", ChannelID: 1, CreatedAt: 1000, Count: 1, Quota: 10},
+		{UserID: 1, Username: "alice", UseGroup: "vip", ModelName: "m", ChannelID: 2, CreatedAt: 1000, Count: 2, Quota: 20},
+	} {
+		seedFlowQuotaData(t, row)
+	}
+
+	all, err := GetAllQuotaDates(900, 2000, "", nil)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.Equal(t, 30, all[0].Quota)
+
+	only2, err := GetAllQuotaDates(900, 2000, "", []int{2})
+	require.NoError(t, err)
+	require.Len(t, only2, 1)
+	require.Equal(t, 20, only2[0].Quota)
+
+	byUser, err := GetAllQuotaDates(900, 2000, "alice", []int{1})
+	require.NoError(t, err)
+	require.Len(t, byUser, 1)
+	require.Equal(t, 10, byUser[0].Quota)
+
+	none, err := GetAllQuotaDates(900, 2000, "", []int{})
+	require.NoError(t, err)
+	require.Empty(t, none)
+
+	flow, err := GetFlowQuotaData(900, 2000, "", 0, common.RoleRootUser, []int{1})
+	require.NoError(t, err)
+	require.Len(t, flow, 1)
+	require.Equal(t, 1, flow[0].ChannelID)
+
+	flowNone, err := GetFlowQuotaData(900, 2000, "", 0, common.RoleAdminUser, []int{})
+	require.NoError(t, err)
+	require.Empty(t, flowNone)
+}
