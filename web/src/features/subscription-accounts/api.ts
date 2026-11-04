@@ -21,9 +21,11 @@ import { requireServerSuccess } from '@/lib/server-error-message'
 
 import type {
   CpaAccount,
+  CpaAlert,
   CpaInstance,
   CpaModel,
   CpaSettings,
+  CpaStatsReport,
   ResetClaimResult,
   SubscriptionOverview,
 } from './types'
@@ -43,6 +45,8 @@ export type CpaInstanceInput = {
   name: string
   base_url: string
   secret: string
+  usage_collect_enabled?: boolean
+  channel_ids?: string
 }
 
 export type AccountRef = { instance_id: number; name: string }
@@ -119,3 +123,34 @@ export function claimResetGrant(ref: AccountRef) {
     api.post<Envelope<ResetClaimResult>>(`${BASE}/account/reset-grant`, ref)
   )
 }
+
+/** Returns the unmasked proxy_url of one account (audited server-side). */
+export function revealAccountProxy(ref: AccountRef) {
+  return unwrap(
+    api.post<Envelope<{ proxy_url: string }>>(`${BASE}/account/proxy`, ref)
+  )
+}
+
+export const STATS_QUERY_KEY = ['subscription-accounts', 'stats']
+
+export function getStats(days: number) {
+  return unwrap(
+    api.get<Envelope<CpaStatsReport>>(`${BASE}/stats`, { params: { days } })
+  )
+}
+
+export function listAlerts() {
+  return unwrap(api.get<Envelope<CpaAlert[]>>(`${BASE}/alerts`))
+}
+
+/** Acknowledges the given alerts, or every open one when ids is omitted. */
+export function acknowledgeAlerts(ids?: number[]) {
+  return unwrap(
+    api.post<Envelope<{ acknowledged: number }>>(
+      `${BASE}/alerts/ack`,
+      ids && ids.length ? { ids } : { all: true }
+    )
+  )
+}
+
+export const ALERTS_QUERY_KEY = ['subscription-accounts', 'alerts']

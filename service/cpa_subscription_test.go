@@ -156,3 +156,107 @@ func TestSelectCpaGrant(t *testing.T) {
 	_, reason = selectCpaGrant(block, now)
 	assert.Equal(t, "ineligible", reason)
 }
+
+func TestIsCpaProxyFailure(t *testing.T) {
+	assert.False(t, isCpaProxyFailure(nil))
+	assert.False(t, isCpaProxyFailure(ErrCpaProxyBlocked), "no proxy configured is blocked, not failed")
+	assert.True(t, isCpaProxyFailure(&cpaHTTPError{Status: http.StatusBadGateway, Message: "request failed"}))
+	assert.True(t, isCpaProxyFailure(&cpaHTTPError{Status: http.StatusBadRequest, Message: "invalid proxy_url"}))
+	assert.False(t, isCpaProxyFailure(&cpaHTTPError{Status: http.StatusUnauthorized}))
+	assert.False(t, isCpaProxyFailure(context.DeadlineExceeded))
+}
+
+func TestTrackCpaProxyHealthStreak(t *testing.T) {
+	badGateway := &cpaHTTPError{Status: http.StatusBadGateway, Message: "request failed"}
+	snap := &CpaAccountSnapshot{InstanceID: 1, Name: "a", Credential: map[string]any{}}
+	// A missing proxy never counts, however often it is seen.
+	trackCpaProxyHealth(snap, ErrCpaProxyBlocked)
+	trackCpaProxyHealth(snap, ErrCpaProxyBlocked)
+	assert.Equal(t, 0, snap.ProxyFailStreak)
+	assert.Zero(t, snap.AutoDisabledAt)
+
+	trackCpaProxyHealth(snap, badGateway)
+	assert.Equal(t, 1, snap.ProxyFailStreak)
+	assert.Zero(t, snap.AutoDisabledAt, "one failure must not disable")
+
+	// Errors unrelated to the proxy keep the streak as is.
+	trackCpaProxyHealth(snap, &cpaHTTPError{Status: http.StatusUnauthorized})
+	assert.Equal(t, 1, snap.ProxyFailStreak)
+
+	trackCpaProxyHealth(snap, nil)
+	assert.Equal(t, 0, snap.ProxyFailStreak)
+
+	// Already disabled accounts are counted but never disabled again.
+	disabled := &CpaAccountSnapshot{Credential: map[string]any{"disabled": true}, ProxyFailStreak: 5}
+	trackCpaProxyHealth(disabled, badGateway)
+	assert.Equal(t, 6, disabled.ProxyFailStreak)
+	assert.Zero(t, disabled.AutoDisabledAt)
+}
+
+func TestAggregateCpaUsage(t *testing.T) {
+	oneHour := int64(300)
+	base := time.Unix(1_800_000_000, 0).UTC()
+	records := []cpaUsageQueueRecord{
+		{Timestamp: base, AuthIndex: "abc", Model: "no-such-model-xyz", LatencyMs: 100},
+		{Timestamp: base.Add(time.Minute), AuthIndex: "abc", Model: "no-such-model-xyz", Failed: true, LatencyMs: 300},
+		{Timestamp: base, AuthIndex: "", Model: "ignored"},
+		{Timestamp: base.Add(2 * time.Hour), AuthIndex: "def", Alias: "alias-only"},
+	}
+	records[0].Tokens.InputTokens = 10
+	records[0].Tokens.OutputTokens = 20
+	records[0].Tokens.CacheReadTokens = 30
+	records[0].Tokens.CacheCreationTokens = 400
+	records[0].Tokens.CacheCreation1hTokens = &oneHour
+	records[1].Tokens.InputTokens = -5 // negative values are clamped
+
+	rows, latest := aggregateCpaUsage(7, records)
+	require.Len(t, rows, 2)
+	bucket := base.Unix() - base.Unix()%3600
+	row := rows[cpaUsageKey{authIndex: "abc", model: "no-such-model-xyz", bucket: bucket}]
+	require.NotNil(t, row)
+	assert.Equal(t, 7, row.InstanceID)
+	assert.EqualValues(t, 2, row.Requests)
+	assert.EqualValues(t, 1, row.Failed)
+	assert.EqualValues(t, 10, row.InputTokens)
+	assert.EqualValues(t, 400, row.CacheCreationTokens)
+	assert.EqualValues(t, 300, row.CacheCreation1hTokens)
+	assert.EqualValues(t, 460, row.TotalTokens())
+	assert.EqualValues(t, 400, row.LatencySumMs)
+	assert.Equal(t, base.Add(2*time.Hour).Unix(), latest["def"])
+	assert.Equal(t, base.Add(time.Minute).Unix(), latest["abc"])
+
+	aliasBucket := base.Add(2*time.Hour).Unix() - base.Add(2*time.Hour).Unix()%3600
+	assert.NotNil(t, rows[cpaUsageKey{authIndex: "def", model: "alias-only", bucket: aliasBucket}])
+}
+
+func TestCpaCountsCapsOneHourWrites(t *testing.T) {
+	big := int64(999)
+	rec := cpaUsageQueueRecord{}
+	rec.Tokens.CacheCreationTokens = 100
+	rec.Tokens.CacheCreation1hTokens = &big
+	assert.EqualValues(t, 100, rec.counts().CacheCreation1h)
+}
+
+func TestEstimateCpaCostUSDUnknownModel(t *testing.T) {
+	_, ok := estimateCpaCostUSD("", cpaTokenCounts{Input: 1})
+	assert.False(t, ok)
+}
+
+func TestUsageWindowPercent(t *testing.T) {
+	usage := map[string]any{
+		"five_hour": map[string]any{"utilization": 42.5},
+		"seven_day": map[string]any{"utilization": "7"},
+		"bad":       "x",
+	}
+	require.NotNil(t, usageWindowPercent(usage, "five_hour"))
+	assert.InDelta(t, 42.5, *usageWindowPercent(usage, "five_hour"), 1e-9)
+	assert.InDelta(t, 7, *usageWindowPercent(usage, "seven_day"), 1e-9)
+	assert.Nil(t, usageWindowPercent(usage, "bad"))
+	assert.Nil(t, usageWindowPercent(nil, "five_hour"))
+}
+
+func TestParseChannelIDsAndHost(t *testing.T) {
+	assert.Equal(t, []int{3, 5}, parseChannelIDs(" 3, x,5,-1,"))
+	assert.Equal(t, "10.0.19.81:8317", hostOf("http://10.0.19.81:8317/v1"))
+	assert.Equal(t, "", hostOf("::bad"))
+}

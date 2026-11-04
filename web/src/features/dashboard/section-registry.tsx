@@ -45,11 +45,19 @@ const DASHBOARD_SECTIONS = [
     adminOnly: true,
     build: () => null,
   },
+  {
+    id: 'subscription-accounts',
+    titleKey: 'Subscription Accounts',
+    adminOnly: true,
+    build: () => null,
+  },
 ] as const
 
 export type DashboardSectionId = (typeof DASHBOARD_SECTIONS)[number]['id']
 
 const ADMIN_ONLY_SECTIONS = new Set<string>(['users'])
+/** Backed by root-only APIs. */
+const ROOT_ONLY_SECTIONS = new Set<string>(['subscription-accounts'])
 
 const dashboardRegistry = createSectionRegistry<
   DashboardSectionId,
@@ -67,11 +75,13 @@ export const DASHBOARD_DEFAULT_SECTION = dashboardRegistry.defaultSection
 
 export function getDashboardSectionNavItems(
   t: TFunction,
-  options?: { isAdmin?: boolean }
+  options?: { isAdmin?: boolean; isRoot?: boolean }
 ) {
   const all = dashboardRegistry.getSectionNavItems(t)
-  if (options?.isAdmin) return all
-  return all.filter(
-    (_, idx) => !ADMIN_ONLY_SECTIONS.has(DASHBOARD_SECTIONS[idx].id)
-  )
+  return all.filter((_, idx) => {
+    const id = DASHBOARD_SECTIONS[idx].id
+    if (ROOT_ONLY_SECTIONS.has(id)) return Boolean(options?.isRoot)
+    if (ADMIN_ONLY_SECTIONS.has(id)) return Boolean(options?.isAdmin)
+    return true
+  })
 }

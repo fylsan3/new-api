@@ -27,6 +27,7 @@ import { PasswordInput } from '@/components/password-input'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { handleServerError } from '@/lib/handle-server-error'
 
 import {
@@ -50,8 +51,17 @@ export function InstanceDialog(props: InstanceDialogProps) {
   const [name, setName] = useState(editing?.name ?? '')
   const [baseUrl, setBaseUrl] = useState(editing?.base_url ?? '')
   const [secret, setSecret] = useState(editing?.has_secret ? '****' : '')
+  const [collect, setCollect] = useState(
+    editing?.usage_collect_enabled ?? false
+  )
+  const [channelIds, setChannelIds] = useState(editing?.channel_ids ?? '')
 
   const input = { name, base_url: baseUrl, secret }
+  const saveInput = {
+    ...input,
+    usage_collect_enabled: collect,
+    channel_ids: channelIds,
+  }
 
   const testMutation = useMutation({
     mutationFn: () => testInstance({ ...input, id: editing?.id }),
@@ -66,7 +76,9 @@ export function InstanceDialog(props: InstanceDialogProps) {
 
   const saveMutation = useMutation({
     mutationFn: () =>
-      editing ? updateInstance(editing.id, input) : createInstance(input),
+      editing
+        ? updateInstance(editing.id, saveInput)
+        : createInstance(saveInput),
     onSuccess: () => {
       toast.success(t('Saved'))
       queryClient.invalidateQueries({ queryKey: OVERVIEW_QUERY_KEY })
@@ -132,6 +144,35 @@ export function InstanceDialog(props: InstanceDialogProps) {
             autoComplete='new-password'
             onChange={(event) => setSecret(event.target.value)}
           />
+        </div>
+        <div className='space-y-1.5 rounded-md border p-3'>
+          <div className='flex items-center justify-between gap-3'>
+            <Label htmlFor='cpa-collect'>{t('Collect usage')}</Label>
+            <Switch
+              id='cpa-collect'
+              checked={collect}
+              onCheckedChange={setCollect}
+            />
+          </div>
+          <p className='text-muted-foreground text-xs'>
+            {t(
+              'Reads and removes records from the CPA usage queue every 15 seconds to show per-account tokens and spend. Requires usage-statistics-enabled in the CPA config. Leave off if anything else reads that queue.'
+            )}
+          </p>
+        </div>
+        <div className='space-y-1.5'>
+          <Label htmlFor='cpa-channels'>{t('Channel IDs (optional)')}</Label>
+          <Input
+            id='cpa-channels'
+            value={channelIds}
+            onChange={(event) => setChannelIds(event.target.value)}
+            placeholder='12,15'
+          />
+          <p className='text-muted-foreground text-xs'>
+            {t(
+              'New API channels that point at this CPA, used to estimate revenue. Leave empty to match channels by host.'
+            )}
+          </p>
         </div>
       </div>
     </Dialog>

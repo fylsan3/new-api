@@ -76,6 +76,7 @@ func SyncCpaInstance(ctx context.Context, instance *model.CpaInstance) (map[stri
 		snap, loadErr := loadSnapshot(instance.ID, name)
 		if loadErr == nil {
 			snap.Credential = cred
+			snap.CredentialSyncedAt = common.GetTimestamp()
 			snap.IsClaude = isClaudeCredential(cred)
 			_ = saveSnapshot(snap)
 		}
@@ -148,12 +149,14 @@ func RefreshCpaAccount(ctx context.Context, instanceID int, name string) (*CpaAc
 		// No valid SOCKS proxy: do not let CPA reach Anthropic at all.
 		snap.QuotaError = proxyErr.Error()
 		snap.QuotaErrorStatus = 0
+		trackCpaProxyHealth(snap, proxyErr)
 		if err := saveSnapshot(snap); err != nil {
 			return nil, err
 		}
 		return snap, nil
 	}
 	usage, status, usageErr := fetchClaudeJSON(ctx, client, guard, authIndex, claudeUsageURL, true)
+	trackCpaProxyHealth(snap, usageErr)
 	if usageErr != nil {
 		snap.QuotaError = usageErr.Error()
 		snap.QuotaErrorStatus = status
@@ -162,6 +165,7 @@ func RefreshCpaAccount(ctx context.Context, instanceID int, name string) (*CpaAc
 		snap.QuotaObservedAt = now
 		snap.QuotaError = ""
 		snap.QuotaErrorStatus = 0
+		recordCpaQuotaPoint(snap)
 		if profile, _, profileErr := fetchClaudeJSON(ctx, client, guard, authIndex, claudeProfileURL, false); profileErr == nil {
 			snap.PlanType = resolveClaudePlanType(profile)
 		}
@@ -357,6 +361,7 @@ func StartCpaSubscriptionScheduler() {
 		if !common.IsMasterNode {
 			return
 		}
+		startCpaUsageCollector()
 		gopool.Go(func() {
 			ticker := time.NewTicker(time.Minute)
 			defer ticker.Stop()
@@ -461,6 +466,15 @@ func RefreshCpaAccountToken(ctx context.Context, instanceID int, name string) er
 	}
 	resyncInstance(instanceID)
 	return nil
+}
+
+// RevealCpaAccountProxy reads the account's proxy_url from CPA unmasked.
+func RevealCpaAccountProxy(ctx context.Context, instanceID int, name string) (string, error) {
+	client, _, err := clientForAccount(instanceID, name)
+	if err != nil {
+		return "", err
+	}
+	return client.credentialProxyURL(ctx, name)
 }
 
 func ListCpaAccountModels(ctx context.Context, instanceID int, name string) ([]map[string]any, error) {

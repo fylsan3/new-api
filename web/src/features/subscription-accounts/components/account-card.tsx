@@ -17,22 +17,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  AlertTriangle,
-  Boxes,
-  KeyRound,
-  Loader2,
-  RefreshCw,
-  RotateCcw,
-} from 'lucide-react'
+import { Loader2, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { formatTimestampToDate } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { cn } from '@/lib/utils'
@@ -44,6 +41,7 @@ import {
   refreshAccountToken,
   setAccountDisabled,
 } from '../api'
+import { socksStateOf } from '../lib/card'
 import {
   PLAN_LABEL_KEYS,
   buildDollarWindows,
@@ -53,8 +51,10 @@ import {
   quotaLevel,
   remainingPercent,
 } from '../lib/quota'
-import type { CpaAccount } from '../types'
+import type { CpaAccount, CpaAlert, CpaCardUsage } from '../types'
 import { ModelsDialog } from './models-dialog'
+import { SocksBadge } from './socks-badge'
+import { StatsLine } from './stats-line'
 
 type PendingAction = 'enable' | 'disable' | 'token' | 'reset' | null
 
@@ -71,6 +71,9 @@ const LEVEL_TEXT_CLASS = {
   danger: 'text-red-600 dark:text-red-400',
   unknown: 'text-muted-foreground',
 } as const
+
+const RED_OUTLINE =
+  'border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10'
 
 function formatIso(value: string | null | undefined) {
   if (!value) return '-'
@@ -93,6 +96,9 @@ function credentialText(value: unknown) {
 type AccountCardProps = {
   account: CpaAccount
   instanceName: string
+  usage: CpaCardUsage | null
+  collecting: boolean
+  alerts: CpaAlert[]
 }
 
 export function AccountCard(props: AccountCardProps) {
@@ -105,6 +111,9 @@ export function AccountCard(props: AccountCardProps) {
   const cred = account.credential ?? {}
   const ref = { instance_id: account.instance_id, name: account.name }
   const disabled = cred.disabled === true
+  const socks = socksStateOf(account)
+  // Anthropic calls are refused without a working SOCKS proxy.
+  const proxyReady = socks === 'ok'
 
   const windows = buildQuotaWindows(account.usage)
   const dollarWindows = buildDollarWindows(account.usage)
@@ -112,18 +121,36 @@ export function AccountCard(props: AccountCardProps) {
   const grants = buildResetGrants(account.reset_grants)
   const resetsLeft = grants?.resetsLeft ?? 0
   const hasResets = resetsLeft > 0
+  const activeGrants = (grants?.grants ?? []).filter((g) => g.resetsLeft > 0)
+  const resetsTotal = activeGrants.reduce((sum, g) => sum + g.resetsTotal, 0)
+  const nextEnds = activeGrants
+    .map((g) => g.endsAt)
+    .filter((v): v is string => !!v)
+    .sort()[0]
   const planLabel = account.plan_type
     ? PLAN_LABEL_KEYS[account.plan_type]
     : undefined
+  const provider =
+    credentialText(cred.provider) ?? credentialText(cred.type) ?? '-'
+  const title = planLabel
+    ? `${provider.charAt(0).toUpperCase()}${provider.slice(1)} · ${planLabel}`
+    : provider
+  const identity =
+    credentialText(cred.email) ?? credentialText(cred.label) ?? account.name
+  const socksAlert = props.alerts.find((a) => a.kind.startsWith('socks_'))
+  const stale = socks !== 'ok' && !!account.quota_observed_at
+  // Only one notice at a time, most urgent first.
+  let notice: 'socks' | 'missing' | 'resets' | null = null
+  if (socksAlert || (disabled && account.auto_disabled_at)) notice = 'socks'
+  else if (socks === 'missing' && account.is_claude) notice = 'missing'
+  else if (hasResets) notice = 'resets'
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: OVERVIEW_QUERY_KEY })
 
   const refreshMutation = useMutation({
     mutationFn: () => refreshAccount(ref),
-    onSuccess: () => {
-      invalidate()
-    },
+    onSuccess: () => invalidate(),
     onError: (error) => handleServerError(error),
   })
 
@@ -183,8 +210,6 @@ export function AccountCard(props: AccountCardProps) {
     },
   }
 
-  const statusText =
-    credentialText(cred.status_message) ?? credentialText(cred.status)
   const warning =
     credentialText(cred.refresh_error) ??
     (cred.requires_sign_in === true ? t('Sign-in required') : null)
@@ -192,79 +217,83 @@ export function AccountCard(props: AccountCardProps) {
   return (
     <div
       className={cn(
-        'bg-card flex flex-col gap-3 rounded-lg border p-4 shadow-xs',
-        hasResets && 'border-red-500 ring-1 ring-red-500/40',
-        disabled && 'opacity-70'
+        'bg-card flex w-[300px] flex-none flex-col rounded-lg border px-3.5 py-3 text-[13px] shadow-xs',
+        hasResets && 'border-red-500',
+        disabled && 'opacity-90'
       )}
     >
-      {/* Identity */}
+      {/* Header */}
       <div className='flex items-start justify-between gap-2'>
-        <div className='min-w-0 space-y-1'>
-          <div className='flex flex-wrap items-center gap-1.5'>
-            <Badge variant='outline'>
-              {credentialText(cred.provider) ??
-                credentialText(cred.type) ??
-                '-'}
-            </Badge>
-            {planLabel && <Badge variant='secondary'>{planLabel}</Badge>}
-            {disabled && <Badge variant='destructive'>{t('Disabled')}</Badge>}
-            {cred.unavailable === true && (
-              <Badge variant='warning'>{t('Unavailable')}</Badge>
-            )}
-          </div>
+        <div className='min-w-0'>
           <div className='truncate font-medium' title={account.name}>
-            {credentialText(cred.label) ??
-              credentialText(cred.email) ??
-              account.name}
+            {title}
           </div>
-          <div className='text-muted-foreground truncate text-xs'>
-            {account.name} · {props.instanceName}
+          <div
+            className='text-muted-foreground truncate text-xs'
+            title={`${identity} · ${account.name} · ${props.instanceName}`}
+          >
+            {identity}
           </div>
         </div>
-        <Switch
-          checked={!disabled}
-          aria-label={t('Enabled')}
-          disabled={actionMutation.isPending}
-          onCheckedChange={(checked) =>
-            setPending(checked ? 'enable' : 'disable')
-          }
+        <div className='flex flex-none items-center gap-1.5'>
+          <SocksBadge account={account} accountRef={ref} />
+          <Switch
+            checked={!disabled}
+            aria-label={t('Enabled')}
+            disabled={actionMutation.isPending}
+            onCheckedChange={(checked) =>
+              setPending(checked ? 'enable' : 'disable')
+            }
+          />
+        </div>
+      </div>
+
+      <div className='mt-1'>
+        <StatsLine
+          account={account}
+          usage={props.usage}
+          collecting={props.collecting}
         />
       </div>
 
-      {/* Warnings */}
-      {warning && (
-        <div className='flex items-start gap-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300'>
-          <AlertTriangle className='mt-0.5 size-3.5 shrink-0' />
-          <span className='break-all'>{warning}</span>
-        </div>
-      )}
-
-      {/* Meta rows */}
-      <div className='text-muted-foreground grid grid-cols-2 gap-x-3 gap-y-1 text-xs'>
-        <span>
-          {t('Status')}: {statusText ?? '-'}
-        </span>
-        <span>
-          {t('Requests')}: {credentialText(cred.success) ?? 0} /{' '}
-          <span className='text-red-600 dark:text-red-400'>
-            {credentialText(cred.failed) ?? 0}
+      {/* Notices */}
+      {notice === 'socks' && (
+        <Notice tone='red'>
+          {t('Proxy unreachable, account disabled automatically')}
+          <br />
+          <span className='text-red-700 dark:text-red-300'>
+            {formatTimestampToDate(
+              socksAlert?.last_seen_at ?? account.auto_disabled_at ?? 0
+            )}{' '}
+            {socksAlert
+              ? t('check failed · waiting for your confirmation')
+              : t('check failed')}
           </span>
-        </span>
-        <span className='col-span-2 truncate' title={account.proxy_url}>
-          {t('Proxy')}:{' '}
-          {account.proxy_url ||
-            (account.proxy_error ? t('Unknown') : t('Global / direct'))}
-        </span>
-        <span className='col-span-2'>
-          {t('Last refresh')}: {formatIso(credentialText(cred.last_refresh))}
-        </span>
-      </div>
+        </Notice>
+      )}
+      {notice === 'missing' && (
+        <Notice tone='amber'>
+          {t('No socks5 proxy configured, quota checks are blocked')}
+          <br />
+          {t('Chats relayed by CPA still go out directly')}
+        </Notice>
+      )}
+      {notice === 'resets' && (
+        <Notice tone='red'>
+          {t('Reset grants: {{left}} / {{total}}', {
+            left: resetsLeft,
+            total: resetsTotal,
+          })}
+          {nextEnds ? ` · ${t('Ends')} ${formatIso(nextEnds)}` : ''}
+        </Notice>
+      )}
+      {warning && <Notice tone='amber'>{warning}</Notice>}
 
       {/* Quota */}
       {account.is_claude && (
-        <div className='space-y-2 border-t pt-3'>
-          {account.quota_error && (
-            <div className='text-xs text-red-600 dark:text-red-400'>
+        <div className='mt-1'>
+          {account.quota_error && socks === 'ok' && (
+            <div className='mb-1 text-xs text-red-600 dark:text-red-400'>
               {account.quota_observed_at
                 ? t('Refresh failed. Showing last successful check: {{time}}', {
                     time: formatTimestampToDate(account.quota_observed_at),
@@ -274,38 +303,8 @@ export function AccountCard(props: AccountCardProps) {
                   })}
             </div>
           )}
-
-          <div
-            className={cn(
-              'flex items-center justify-between rounded-md px-2 py-1 text-sm',
-              hasResets
-                ? 'bg-red-50 font-semibold text-red-600 dark:bg-red-500/15 dark:text-red-400'
-                : 'text-muted-foreground'
-            )}
-          >
-            <span>{t('Reset grants left')}</span>
-            <span>{grants ? resetsLeft : '--'}</span>
-          </div>
-          {grants && grants.grants.length > 0 && hasResets && (
-            <ul className='space-y-0.5 text-xs text-red-600 dark:text-red-400'>
-              {grants.grants
-                .filter((grant) => grant.resetsLeft > 0)
-                .map((grant, index) => (
-                  <li key={grant.id}>
-                    {grant.label || t('Batch {{index}}', { index: index + 1 })}:{' '}
-                    {t('{{left}} / {{total}} resets left', {
-                      left: grant.resetsLeft,
-                      total: grant.resetsTotal,
-                    })}
-                    {grant.endsAt &&
-                      ` · ${t('Expires')} ${formatIso(grant.endsAt)}`}
-                  </li>
-                ))}
-            </ul>
-          )}
-
           {extra && extra.isEnabled && (
-            <div className='text-xs'>
+            <div className='text-muted-foreground mb-1 text-xs'>
               {t('Extra usage')}:{' '}
               {t('Spent {{spent}} / limit {{limit}}', {
                 spent: formatMoney(
@@ -319,67 +318,86 @@ export function AccountCard(props: AccountCardProps) {
               })}
             </div>
           )}
-
           {dollarWindows.map((balance) => (
-            <div key={balance.key} className='text-xs'>
+            <div key={balance.key} className='text-muted-foreground text-xs'>
               {t('Balance')} ({balance.key}):{' '}
               {formatMoney(balance.remainingDollars)} /{' '}
               {formatMoney(balance.limitDollars)}
-              {balance.resetsAt && ` · ${formatIso(balance.resetsAt)}`}
             </div>
           ))}
-
-          {windows.map((window) => {
-            const remaining = remainingPercent(window.usedPercent)
-            const level = quotaLevel(remaining)
-            return (
-              <div key={window.id} className='space-y-1'>
-                <div className='flex items-center justify-between text-xs'>
-                  <span>{t(window.labelKey)}</span>
-                  <span className={cn('font-medium', LEVEL_TEXT_CLASS[level])}>
-                    {remaining === null
-                      ? '-'
-                      : t('{{percent}}% left', {
-                          percent: Math.round(remaining),
-                        })}
-                  </span>
+          {(socks !== 'missing' || stale) &&
+            windows.map((window) => {
+              const remaining = remainingPercent(window.usedPercent)
+              const level = stale ? 'unknown' : quotaLevel(remaining)
+              return (
+                <div
+                  key={window.id}
+                  title={`${t('Resets at')} ${formatIso(window.resetsAt)}`}
+                >
+                  <div className='text-muted-foreground flex justify-between text-xs'>
+                    <span>{t(window.labelKey)}</span>
+                    <span className={LEVEL_TEXT_CLASS[level]}>
+                      {remainingLabel(remaining, stale, t)}
+                    </span>
+                  </div>
+                  <div className='bg-muted mt-0.5 mb-1.5 h-[5px] overflow-hidden rounded-full'>
+                    <div
+                      className={cn('h-full', LEVEL_BAR_CLASS[level])}
+                      style={{ width: `${remaining ?? 0}%` }}
+                    />
+                  </div>
                 </div>
-                <div className='bg-muted h-1.5 overflow-hidden rounded-full'>
-                  <div
-                    className={cn(
-                      'h-full rounded-full',
-                      LEVEL_BAR_CLASS[level]
-                    )}
-                    style={{ width: `${remaining ?? 0}%` }}
-                  />
-                </div>
-                <div className='text-muted-foreground text-[11px]'>
-                  {t('Resets at')} {formatIso(window.resetsAt)}
-                </div>
-              </div>
-            )
-          })}
-          {!account.quota_error && windows.length === 0 && (
+              )
+            })}
+          {socks === 'ok' && !account.quota_error && windows.length === 0 && (
             <div className='text-muted-foreground text-xs'>
               {account.quota_checked_at
                 ? t('No usage windows returned')
                 : t('Not checked yet, click refresh')}
             </div>
           )}
-          {account.quota_observed_at ? (
-            <div className='text-muted-foreground text-[11px]'>
-              {t('Checked at')}{' '}
-              {formatTimestampToDate(account.quota_observed_at)}
-            </div>
-          ) : null}
         </div>
       )}
 
       {/* Actions */}
-      <div className='mt-auto flex flex-wrap gap-1.5 border-t pt-3'>
+      <div className='mt-auto flex items-center gap-1.5 border-t pt-2.5'>
         <Button size='xs' variant='outline' onClick={() => setModelsOpen(true)}>
-          <Boxes /> {t('Models')}
+          {t('Models')}
         </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                size='xs'
+                variant='outline'
+                className={cn(proxyReady && RED_OUTLINE)}
+                disabled={!proxyReady}
+                onClick={() => setPending('token')}
+              />
+            }
+          >
+            {t('Refresh token')}
+          </TooltipTrigger>
+          <TooltipContent className='max-w-60'>
+            {proxyReady
+              ? t(
+                  'Asks CPA to renew the login token through this account’s SOCKS proxy. Only needed when requests fail with auth errors.'
+                )
+              : t('Needs a working socks5 proxy')}
+          </TooltipContent>
+        </Tooltip>
+        {account.is_claude && (
+          <Button
+            size='xs'
+            variant='outline'
+            className={cn(hasResets && proxyReady && RED_OUTLINE)}
+            disabled={!hasResets || !proxyReady}
+            onClick={() => setPending('reset')}
+          >
+            {t('Use reset grant')}
+          </Button>
+        )}
+        <span className='flex-1' />
         <Button
           size='xs'
           variant='outline'
@@ -393,19 +411,6 @@ export function AccountCard(props: AccountCardProps) {
           )}
           {t('Refresh')}
         </Button>
-        <Button size='xs' variant='outline' onClick={() => setPending('token')}>
-          <KeyRound /> {t('Refresh token')}
-        </Button>
-        {account.is_claude && (
-          <Button
-            size='xs'
-            variant={hasResets ? 'destructive' : 'outline'}
-            disabled={!hasResets}
-            onClick={() => setPending('reset')}
-          >
-            <RotateCcw /> {t('Use reset grant')}
-          </Button>
-        )}
       </div>
 
       {pending && (
@@ -416,7 +421,7 @@ export function AccountCard(props: AccountCardProps) {
           }}
           title={confirmCopy[pending].title}
           desc={confirmCopy[pending].desc}
-          destructive={pending === 'disable' || pending === 'reset'}
+          destructive={pending !== 'enable'}
           isLoading={actionMutation.isPending}
           handleConfirm={() => actionMutation.mutate(pending)}
         />
@@ -430,4 +435,31 @@ export function AccountCard(props: AccountCardProps) {
       )}
     </div>
   )
+}
+
+function Notice(props: { tone: 'red' | 'amber'; children: React.ReactNode }) {
+  return (
+    <div
+      className={cn(
+        'my-2 rounded-md px-2 py-1.5 text-xs leading-normal break-all',
+        props.tone === 'red'
+          ? 'bg-red-50 text-red-900 dark:bg-red-500/15 dark:text-red-200'
+          : 'bg-amber-50 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200'
+      )}
+    >
+      {props.children}
+    </div>
+  )
+}
+
+function remainingLabel(
+  remaining: number | null,
+  stale: boolean,
+  t: (key: string, options?: Record<string, unknown>) => string
+): string {
+  if (remaining === null) return '-'
+  const percent = Math.round(remaining)
+  return stale
+    ? t('Last {{percent}}%', { percent })
+    : t('{{percent}}% left', { percent })
 }

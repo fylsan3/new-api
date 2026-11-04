@@ -25,6 +25,9 @@ func init() {
 	auditContentTemplates["cpa_subscription.token_refresh"] = "Refreshed token of subscription account ${name} (CPA ${instance_id})"
 	auditContentTemplates["cpa_subscription.reset_grant_claim"] = "Claimed reset grant for subscription account ${name}: ${result}"
 	auditContentTemplates["cpa_subscription.settings_update"] = "Updated subscription account refresh settings"
+	auditContentTemplates["cpa_subscription.usage_collect"] = "Set usage collection of CPA ${name} (ID: ${id}) to ${enabled}"
+	auditContentTemplates["cpa_subscription.alert_ack"] = "Acknowledged ${count} subscription account alert(s)"
+	auditContentTemplates["cpa_subscription.proxy_reveal"] = "Viewed full proxy address of subscription account ${name} (CPA ${instance_id})"
 }
 
 type cpaInstanceView struct {
@@ -42,9 +45,36 @@ func toCpaInstanceView(instance model.CpaInstance) cpaInstanceView {
 }
 
 type cpaInstanceRequest struct {
-	Name    string `json:"name"`
-	BaseURL string `json:"base_url"`
-	Secret  string `json:"secret"`
+	Name                string  `json:"name"`
+	BaseURL             string  `json:"base_url"`
+	Secret              string  `json:"secret"`
+	UsageCollectEnabled *bool   `json:"usage_collect_enabled"`
+	ChannelIDs          *string `json:"channel_ids"`
+}
+
+// normalizeChannelIDs keeps positive integers only, deduplicated.
+func normalizeChannelIDs(raw string) (string, error) {
+	seen := map[int]bool{}
+	out := make([]string, 0)
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		id, err := strconv.Atoi(part)
+		if err != nil || id <= 0 {
+			return "", errors.New("channel_ids must be comma separated channel IDs")
+		}
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, strconv.Itoa(id))
+		}
+	}
+	joined := strings.Join(out, ",")
+	if len(joined) > 1000 {
+		return "", errors.New("too many channel IDs")
+	}
+	return joined, nil
 }
 
 func (r *cpaInstanceRequest) secretProvided() bool {
@@ -76,9 +106,21 @@ func ListCpaSubscriptionOverview(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	cardUsage, err := service.ListCpaCardUsage()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	alerts, err := model.ListOpenCpaAlerts()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	common.ApiSuccess(c, gin.H{
 		"instances":           views,
 		"accounts":            accounts,
+		"usage":               cardUsage,
+		"alerts":              alerts,
 		"settings":            setting,
 		"refresh_all_running": service.IsCpaRefreshAllRunning(),
 		"now":                 common.GetTimestamp(),
@@ -111,11 +153,24 @@ func CreateCpaInstance(c *gin.Context) {
 		return
 	}
 	instance := model.CpaInstance{Name: name, BaseURL: baseURL, SecretEnc: enc}
+	if req.UsageCollectEnabled != nil {
+		instance.UsageCollectEnabled = *req.UsageCollectEnabled
+	}
+	if req.ChannelIDs != nil {
+		ids, idsErr := normalizeChannelIDs(*req.ChannelIDs)
+		if idsErr != nil {
+			common.ApiError(c, idsErr)
+			return
+		}
+		instance.ChannelIDs = ids
+	}
 	if err := model.CreateCpaInstance(&instance); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	recordManageAudit(c, "cpa_subscription.instance_create", map[string]any{"id": instance.ID, "name": name, "base_url": baseURL})
+	recordManageAudit(c, "cpa_subscription.instance_create", map[string]any{
+		"id": instance.ID, "name": name, "base_url": baseURL, "usage_collect_enabled": instance.UsageCollectEnabled,
+	})
 	common.ApiSuccess(c, toCpaInstanceView(instance))
 }
 
@@ -151,13 +206,31 @@ func UpdateCpaInstance(c *gin.Context) {
 		}
 		instance.SecretEnc = enc
 	}
+	if req.ChannelIDs != nil {
+		ids, idsErr := normalizeChannelIDs(*req.ChannelIDs)
+		if idsErr != nil {
+			common.ApiError(c, idsErr)
+			return
+		}
+		instance.ChannelIDs = ids
+	}
+	collectChanged := req.UsageCollectEnabled != nil && *req.UsageCollectEnabled != instance.UsageCollectEnabled
+	if req.UsageCollectEnabled != nil {
+		instance.UsageCollectEnabled = *req.UsageCollectEnabled
+	}
 	if err := model.SaveCpaInstance(instance); err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	recordManageAudit(c, "cpa_subscription.instance_update", map[string]any{
 		"id": instance.ID, "name": instance.Name, "base_url": instance.BaseURL, "secret_changed": secretChanged,
+		"channel_ids": instance.ChannelIDs,
 	})
+	if collectChanged {
+		recordManageAudit(c, "cpa_subscription.usage_collect", map[string]any{
+			"id": instance.ID, "name": instance.Name, "enabled": instance.UsageCollectEnabled,
+		})
+	}
 	common.ApiSuccess(c, toCpaInstanceView(*instance))
 }
 
@@ -372,9 +445,10 @@ func ClaimCpaAccountResetGrant(c *gin.Context) {
 
 func UpdateCpaSubscriptionSettings(c *gin.Context) {
 	var req struct {
-		AutoRefreshEnabled         *bool `json:"auto_refresh_enabled"`
-		AutoRefreshIntervalMinutes *int  `json:"auto_refresh_interval_minutes"`
-		RefreshAllCooldownSeconds  *int  `json:"refresh_all_cooldown_seconds"`
+		AutoRefreshEnabled         *bool    `json:"auto_refresh_enabled"`
+		AutoRefreshIntervalMinutes *int     `json:"auto_refresh_interval_minutes"`
+		RefreshAllCooldownSeconds  *int     `json:"refresh_all_cooldown_seconds"`
+		ProxyMonthlyCostUSD        *float64 `json:"proxy_monthly_cost_usd"`
 	}
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
 		common.ApiErrorMsg(c, "invalid request body")
@@ -394,6 +468,9 @@ func UpdateCpaSubscriptionSettings(c *gin.Context) {
 	if req.RefreshAllCooldownSeconds != nil {
 		setting.RefreshAllCooldownSeconds = *req.RefreshAllCooldownSeconds
 	}
+	if req.ProxyMonthlyCostUSD != nil {
+		setting.ProxyMonthlyCostUSD = *req.ProxyMonthlyCostUSD
+	}
 	if err := model.SaveCpaSubscriptionSetting(setting); err != nil {
 		common.ApiError(c, err)
 		return
@@ -402,6 +479,67 @@ func UpdateCpaSubscriptionSettings(c *gin.Context) {
 		"auto_refresh_enabled":          setting.AutoRefreshEnabled,
 		"auto_refresh_interval_minutes": setting.AutoRefreshIntervalMinutes,
 		"refresh_all_cooldown_seconds":  setting.RefreshAllCooldownSeconds,
+		"proxy_monthly_cost_usd":        setting.ProxyMonthlyCostUSD,
 	})
 	common.ApiSuccess(c, setting)
+}
+
+func GetCpaSubscriptionStats(c *gin.Context) {
+	days, _ := strconv.Atoi(c.DefaultQuery("days", "7"))
+	report, err := service.BuildCpaStats(days)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, report)
+}
+
+func ListCpaAlerts(c *gin.Context) {
+	alerts, err := model.ListOpenCpaAlerts()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, alerts)
+}
+
+// AcknowledgeCpaAlerts closes the given alerts; an empty ids list closes all.
+func AcknowledgeCpaAlerts(c *gin.Context) {
+	var req struct {
+		IDs []int `json:"ids"`
+		All bool  `json:"all"`
+	}
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiErrorMsg(c, "invalid request body")
+		return
+	}
+	if len(req.IDs) == 0 && !req.All {
+		common.ApiErrorMsg(c, "ids or all is required")
+		return
+	}
+	count, err := model.AcknowledgeCpaAlerts(req.IDs, c.GetInt("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "cpa_subscription.alert_ack", map[string]any{"count": count, "ids": req.IDs})
+	common.ApiSuccess(c, gin.H{"acknowledged": count})
+}
+
+// RevealCpaAccountProxy returns the unmasked proxy_url of one account. Root
+// only and audited; the value is read fresh from CPA and never cached.
+func RevealCpaAccountProxy(c *gin.Context) {
+	req, ok := bindCpaAccount(c)
+	if !ok {
+		return
+	}
+	ctx, cancel := cpaRequestContext(c, 20*time.Second)
+	defer cancel()
+	proxy, err := service.RevealCpaAccountProxy(ctx, req.InstanceID, req.Name)
+	recordManageAudit(c, "cpa_subscription.proxy_reveal", map[string]any{"instance_id": req.InstanceID, "name": req.Name, "success": err == nil})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"proxy_url": proxy})
 }

@@ -25,6 +25,13 @@ export type CpaInstance = {
   last_test_at: number
   last_test_ok: boolean
   last_test_msg: string
+  usage_collect_enabled: boolean
+  channel_ids: string
+  usage_last_poll_at: number
+  usage_last_record_at: number
+  usage_last_error: string
+  /** 0 unknown, 1 CPA usage statistics on, 2 off. */
+  usage_remote_state: number
   created_at: number
   updated_at: number
 }
@@ -34,6 +41,7 @@ export type CpaSettings = {
   auto_refresh_interval_minutes: number
   refresh_all_cooldown_seconds: number
   last_refresh_all_at: number
+  proxy_monthly_cost_usd: number
 }
 
 /** Credential fields mirrored from CPA `GET /credentials` (subset). */
@@ -60,12 +68,14 @@ export type CpaCredential = Record<string, unknown> & {
   updated_at?: string
   refresh_error?: string
   requires_sign_in?: boolean
+  recent_requests?: unknown[]
 }
 
 export type CpaAccount = {
   instance_id: number
   name: string
   credential?: CpaCredential
+  credential_synced_at?: number
   proxy_url?: string
   proxy_error?: string
   is_claude: boolean
@@ -77,7 +87,28 @@ export type CpaAccount = {
   quota_error_status?: number
   reset_grants?: Record<string, unknown>
   reset_grants_error?: string
+  proxy_fail_streak?: number
+  auto_disabled_at?: number
+  last_request_at?: number
   updated_at: number
+}
+
+/** Last-30-day usage collected from the CPA usage queue. */
+export type CpaCardUsage = {
+  requests: number
+  tokens: number
+  cost_usd: number
+}
+
+export type CpaAlert = {
+  id: number
+  instance_id: number
+  name: string
+  kind: string
+  message: string
+  count: number
+  created_at: number
+  last_seen_at: number
 }
 
 export type SubscriptionOverview = {
@@ -86,6 +117,69 @@ export type SubscriptionOverview = {
   settings: CpaSettings
   refresh_all_running: boolean
   now: number
+  /** Keyed by `${instance_id}/${auth_index}`. */
+  usage: Record<string, CpaCardUsage>
+  alerts: CpaAlert[]
+}
+
+export type CpaAccountStats = {
+  instance_id: number
+  name: string
+  auth_index: string
+  email?: string
+  plan_type?: string
+  disabled: boolean
+  requests: number
+  failed: number
+  tokens: number
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
+  avg_latency_ms: number
+  cost_usd: number
+  unpriced_requests: number
+  revenue_usd: number
+  plan_cost_usd: number
+  plan_cost_known: boolean
+  proxy_cost_usd: number
+  five_hour?: number
+  seven_day?: number
+}
+
+export type CpaDailyPoint = {
+  day: number
+  requests: number
+  failed: number
+  tokens: number
+  cost_usd: number
+  revenue_usd: number
+}
+
+export type CpaInstanceRevenue = {
+  instance_id: number
+  channel_ids: number[]
+  revenue_usd: number
+  requests: number
+}
+
+export type CpaQuotaPoint = {
+  instance_id: number
+  name: string
+  ts: number
+  five_hour?: number | null
+  seven_day?: number | null
+}
+
+export type CpaStatsReport = {
+  from: number
+  to: number
+  days: number
+  accounts: CpaAccountStats[]
+  daily: CpaDailyPoint[]
+  instances: CpaInstanceRevenue[]
+  quota_points: CpaQuotaPoint[]
+  estimated: boolean
 }
 
 export type CpaModel = {

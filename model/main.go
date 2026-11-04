@@ -379,6 +379,9 @@ func migrateDB() error {
 		&CpaInstance{},
 		&CpaAccountCache{},
 		&CpaSubscriptionSetting{},
+		&CpaUsageHourly{},
+		&CpaQuotaPoint{},
+		&CpaAlert{},
 	)
 	if err != nil {
 		return err

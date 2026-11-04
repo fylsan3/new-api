@@ -109,6 +109,12 @@ const LazyUserCharts = lazy(() =>
   }))
 )
 
+const LazySubscriptionStats = lazy(() =>
+  import('@/features/subscription-accounts/components/stats-section').then(
+    (m) => ({ default: m.SubscriptionStatsSection })
+  )
+)
+
 const LazyFlowCharts = lazy(() =>
   import('./components/flow/flow-charts').then((m) => ({
     default: m.FlowCharts,
@@ -194,6 +200,9 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   users: {
     titleKey: 'User Analytics',
   },
+  'subscription-accounts': {
+    titleKey: 'Subscription Accounts',
+  },
 }
 
 export function Dashboard() {
@@ -250,12 +259,16 @@ export function Dashboard() {
 
   const meta = SECTION_META[activeSection] ?? SECTION_META.overview
   const isAdmin = Boolean(userRole && userRole >= ROLE.ADMIN)
+  const isRoot = Boolean(userRole && userRole >= ROLE.SUPER_ADMIN)
   const visibleSections = useMemo(
     () =>
-      DASHBOARD_SECTION_IDS.filter(
-        (section) => section !== 'overview' && (section !== 'users' || isAdmin)
-      ),
-    [isAdmin]
+      DASHBOARD_SECTION_IDS.filter((section) => {
+        if (section === 'overview') return false
+        if (section === 'users') return isAdmin
+        if (section === 'subscription-accounts') return isRoot
+        return true
+      }),
+    [isAdmin, isRoot]
   )
   const handleSectionChange = useCallback(
     (section: string) => {
@@ -395,6 +408,13 @@ export function Dashboard() {
                 </Suspense>
               </FadeIn>
             </>
+          )}
+          {activeSection === 'subscription-accounts' && isRoot && (
+            <FadeIn>
+              <Suspense fallback={<ModelChartsFallback />}>
+                <LazySubscriptionStats />
+              </Suspense>
+            </FadeIn>
           )}
           {activeSection === 'users' && (
             <FadeIn>

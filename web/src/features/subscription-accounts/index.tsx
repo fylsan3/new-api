@@ -47,8 +47,10 @@ import {
   syncInstances,
 } from './api'
 import { AccountCard } from './components/account-card'
+import { CpaAlertBanner } from './components/alert-banner'
 import { InstanceDialog } from './components/instance-dialog'
 import { RefreshControls } from './components/refresh-controls'
+import { alertsOf, cardUsageOf } from './lib/card'
 import { sortAccounts } from './lib/quota'
 import type { CpaInstance } from './types'
 
@@ -96,6 +98,11 @@ export function SubscriptionAccounts() {
     (data?.instances ?? []).map((instance) => [instance.id, instance.name])
   )
   const accounts = sortAccounts(data?.accounts ?? [])
+  const collecting = new Set(
+    (data?.instances ?? [])
+      .filter((instance) => instance.usage_collect_enabled)
+      .map((instance) => instance.id)
+  )
 
   let content: React.ReactNode
   if (query.isLoading) {
@@ -133,12 +140,15 @@ export function SubscriptionAccounts() {
     )
   } else {
     content = (
-      <div className='grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'>
+      <div className='flex flex-wrap items-start gap-4'>
         {accounts.map((account) => (
           <AccountCard
             key={`${account.instance_id}/${account.name}`}
             account={account}
             instanceName={instanceNames.get(account.instance_id) ?? '-'}
+            usage={cardUsageOf(data.usage, account)}
+            collecting={collecting.has(account.instance_id)}
+            alerts={alertsOf(data.alerts, account)}
           />
         ))}
       </div>
@@ -186,6 +196,10 @@ export function SubscriptionAccounts() {
             )}
           </div>
 
+          {data?.alerts?.length ? (
+            <CpaAlertBanner alerts={data.alerts} />
+          ) : null}
+
           {data?.instances.length ? (
             <div className='flex flex-wrap gap-2'>
               {data.instances.map((instance) => (
@@ -206,6 +220,23 @@ export function SubscriptionAccounts() {
                   </span>
                   <span className='text-muted-foreground text-xs'>
                     {t('Key')}: {instance.has_secret ? '****' : '-'}
+                  </span>
+                  <span
+                    className={
+                      instance.usage_collect_enabled &&
+                      (instance.usage_last_error ||
+                        instance.usage_remote_state === 2)
+                        ? 'text-xs text-red-600 dark:text-red-400'
+                        : 'text-muted-foreground text-xs'
+                    }
+                    title={
+                      instance.usage_last_error ||
+                      (instance.usage_last_poll_at
+                        ? `${t('Last poll')} ${formatTimestampToDate(instance.usage_last_poll_at)}`
+                        : undefined)
+                    }
+                  >
+                    {usageStateLabel(instance, t)}
                   </span>
                   {instance.last_test_at > 0 && (
                     <span
@@ -269,4 +300,15 @@ export function SubscriptionAccounts() {
       </SectionPageLayout.Content>
     </SectionPageLayout>
   )
+}
+
+// Literal t() calls keep the keys visible to the i18n extractor.
+function usageStateLabel(
+  instance: CpaInstance,
+  t: (key: string) => string
+): string {
+  if (!instance.usage_collect_enabled) return t('Usage collection off')
+  if (instance.usage_remote_state === 2) return t('CPA usage statistics off')
+  if (instance.usage_last_error) return t('Usage collection error')
+  return t('Collecting usage')
 }

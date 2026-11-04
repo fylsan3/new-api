@@ -20,6 +20,18 @@ type CpaInstance struct {
 	LastTestMsg string `json:"last_test_msg" gorm:"type:varchar(512)"`
 	CreatedAt   int64  `json:"created_at" gorm:"bigint"`
 	UpdatedAt   int64  `json:"updated_at" gorm:"bigint"`
+
+	// UsageCollectEnabled makes New API drain this CPA's usage queue. Off by
+	// default: popping is destructive, so it must be an explicit choice.
+	UsageCollectEnabled bool `json:"usage_collect_enabled"`
+	// ChannelIDs lists the New API channels that forward to this CPA
+	// (comma separated). Empty means "match channels by host".
+	ChannelIDs        string `json:"channel_ids" gorm:"type:varchar(1024)"`
+	UsageLastPollAt   int64  `json:"usage_last_poll_at" gorm:"bigint"`
+	UsageLastRecordAt int64  `json:"usage_last_record_at" gorm:"bigint"`
+	UsageLastError    string `json:"usage_last_error" gorm:"type:varchar(512)"`
+	// UsageRemoteState mirrors CPA usage-statistics-enabled: 0 unknown, 1 on, 2 off.
+	UsageRemoteState int `json:"usage_remote_state"`
 }
 
 // CpaAccountCache keeps the last known snapshot of one credential so the page
@@ -39,6 +51,8 @@ type CpaSubscriptionSetting struct {
 	AutoRefreshIntervalMinutes int   `json:"auto_refresh_interval_minutes"`
 	RefreshAllCooldownSeconds  int   `json:"refresh_all_cooldown_seconds"`
 	LastRefreshAllAt           int64 `json:"last_refresh_all_at" gorm:"bigint"`
+	// ProxyMonthlyCostUSD is the SOCKS proxy cost of one account per month.
+	ProxyMonthlyCostUSD float64 `json:"proxy_monthly_cost_usd"`
 }
 
 const (
@@ -52,6 +66,9 @@ func (s *CpaSubscriptionSetting) Normalize() {
 	}
 	if s.RefreshAllCooldownSeconds < CpaRefreshAllMinCooldownSeconds {
 		s.RefreshAllCooldownSeconds = CpaRefreshAllMinCooldownSeconds
+	}
+	if s.ProxyMonthlyCostUSD < 0 {
+		s.ProxyMonthlyCostUSD = 0
 	}
 }
 
@@ -83,8 +100,10 @@ func SaveCpaInstance(instance *CpaInstance) error {
 
 func DeleteCpaInstance(id int) error {
 	return DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("instance_id = ?", id).Delete(&CpaAccountCache{}).Error; err != nil {
-			return err
+		for _, table := range []any{&CpaAccountCache{}, &CpaUsageHourly{}, &CpaQuotaPoint{}, &CpaAlert{}} {
+			if err := tx.Where("instance_id = ?", id).Delete(table).Error; err != nil {
+				return err
+			}
 		}
 		return tx.Delete(&CpaInstance{}, "id = ?", id).Error
 	})

@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, it } from 'vitest'
 
+import { cardUsageOf, lastRequestAt, socksStateOf } from '../lib/card'
 import {
   buildDollarWindows,
   buildQuotaWindows,
@@ -103,5 +104,57 @@ describe('subscription accounts quota helpers', () => {
         ],
       })?.resetsLeft
     ).toBe(3)
+  })
+})
+
+describe('subscription accounts card helpers', () => {
+  const base = account('a')
+
+  it('maps proxy state to green / red / grey', () => {
+    expect(socksStateOf({ ...base, proxy_url: 'socks5h://u:****@h:1' })).toBe(
+      'ok'
+    )
+    expect(
+      socksStateOf({
+        ...base,
+        proxy_error:
+          'blocked: account has no valid socks5/socks5h proxy_url, request not sent',
+      })
+    ).toBe('missing')
+    expect(socksStateOf(base)).toBe('missing')
+    expect(
+      socksStateOf({
+        ...base,
+        proxy_url: 'socks5h://h:1',
+        proxy_fail_streak: 1,
+      })
+    ).toBe('failed')
+    expect(
+      socksStateOf({ ...base, proxy_url: 'socks5h://h:1', auto_disabled_at: 5 })
+    ).toBe('failed')
+  })
+
+  it('looks up card usage by instance and auth_index', () => {
+    const usage = { '1/abc': { requests: 2, tokens: 3, cost_usd: 1 } }
+    expect(
+      cardUsageOf(usage, { ...base, credential: { auth_index: 'abc' } })
+    ).toEqual(usage['1/abc'])
+    expect(cardUsageOf(usage, base)).toBeNull()
+  })
+
+  it('prefers queue time and falls back to recent_requests buckets', () => {
+    expect(lastRequestAt({ ...base, last_request_at: 123 })).toBe(123)
+    const recent = Array.from({ length: 20 }, () => ({ success: 0, failed: 0 }))
+    recent[17] = { success: 1, failed: 0 }
+    expect(
+      lastRequestAt({
+        ...base,
+        credential_synced_at: 10_000,
+        credential: { recent_requests: recent },
+      })
+    ).toBe(10_000 - 2 * 600)
+    expect(
+      lastRequestAt({ ...base, credential: { recent_requests: recent } })
+    ).toBe(0)
   })
 })

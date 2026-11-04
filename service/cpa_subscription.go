@@ -140,7 +140,12 @@ func (e *cpaHTTPError) Error() string {
 }
 
 func (c *cpaClient) do(ctx context.Context, method, path string, query url.Values, body any, out any) error {
-	endpoint := c.baseURL + cpaManagementPrefix + path
+	return c.doRaw(ctx, method, cpaManagementPrefix+path, query, body, out)
+}
+
+// doRaw calls a management path outside the v8 prefix (e.g. v0-only routes).
+func (c *cpaClient) doRaw(ctx context.Context, method, fullPath string, query url.Values, body any, out any) error {
+	endpoint := c.baseURL + fullPath
 	if len(query) > 0 {
 		endpoint += "?" + query.Encode()
 	}
@@ -382,6 +387,8 @@ type CpaAccountSnapshot struct {
 	InstanceID       int            `json:"instance_id"`
 	Name             string         `json:"name"`
 	Credential       map[string]any `json:"credential"`
+	// CredentialSyncedAt is when Credential (incl. recent_requests) was read.
+	CredentialSyncedAt int64        `json:"credential_synced_at,omitempty"`
 	ProxyURL         string         `json:"proxy_url"`
 	ProxyError       string         `json:"proxy_error,omitempty"`
 	IsClaude         bool           `json:"is_claude"`
@@ -393,7 +400,13 @@ type CpaAccountSnapshot struct {
 	QuotaErrorStatus int            `json:"quota_error_status,omitempty"`
 	ResetGrants      map[string]any `json:"reset_grants,omitempty"`
 	ResetGrantsError string         `json:"reset_grants_error,omitempty"`
-	UpdatedAt        int64          `json:"updated_at"`
+	// ProxyFailStreak counts consecutive refreshes that failed on the SOCKS
+	// proxy; at cpaProxyFailDisableThreshold the account is disabled.
+	ProxyFailStreak int   `json:"proxy_fail_streak,omitempty"`
+	AutoDisabledAt  int64 `json:"auto_disabled_at,omitempty"`
+	// LastRequestAt is the newest relay request seen in the usage queue.
+	LastRequestAt int64 `json:"last_request_at,omitempty"`
+	UpdatedAt     int64 `json:"updated_at"`
 }
 
 func credentialString(cred map[string]any, key string) string {
