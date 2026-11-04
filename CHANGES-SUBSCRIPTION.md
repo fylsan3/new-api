@@ -85,6 +85,8 @@
 | `main.go` | 启动后台自动刷新调度器 `service.StartCpaSubscriptionScheduler()` |
 | `web/src/hooks/use-sidebar-data.ts` | 侧边栏菜单项 |
 
+| `web/src/features/dashboard/components/overview/overview-dashboard.tsx` | 概览页**去掉设置引导**（「开始使用」三步、「首个 API 请求」、「推荐操作 / 保持平台就绪」、折叠进度条、标题栏「设置引导」按钮）；测试 `__tests__/setup-guide.test.tsx` 改为断言不再出现（2026-11-04） |
+
 另：7 个语言文件 `web/src/i18n/locales/*.json` **只在末尾追加**文案；`web/src/routeTree.gen.ts` 为构建自动生成。
 
 ## 三、新增文件
