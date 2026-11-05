@@ -89,6 +89,8 @@ export function RefreshControls(props: RefreshControlsProps) {
     String(props.settings.auto_refresh_interval_minutes)
   )
 
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: OVERVIEW_QUERY_KEY })
 
@@ -174,7 +176,21 @@ export function RefreshControls(props: RefreshControlsProps) {
         <span className='text-muted-foreground'>{t('min')}</span>
       </div>
 
-      <Popover>
+      <Popover
+        open={settingsOpen}
+        onOpenChange={(open, details) => {
+          // The trigger is also the "Refresh all" button. Base UI opens a
+          // popover on click/focus by default; only a 5s hover may open it.
+          if (
+            open &&
+            (details.reason === 'trigger-press' ||
+              details.reason === 'trigger-focus')
+          ) {
+            return
+          }
+          setSettingsOpen(open)
+        }}
+      >
         <PopoverTrigger
           openOnHover
           delay={SETTINGS_HOVER_DELAY_MS}
