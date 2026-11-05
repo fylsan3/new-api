@@ -130,7 +130,10 @@ func RefreshCpaAccount(ctx context.Context, instanceID int, name string) (*CpaAc
 	if guard != nil {
 		snap.ProxyURL = MaskProxyURL(guard.proxyURL)
 	}
-	if proxyErr != nil {
+	// No proxy_url at all is not a proxy error: the user leaves test accounts
+	// like this on purpose (see directGuard below).
+	noProxy := proxyErr != nil && guard != nil && guard.proxyURL == ""
+	if proxyErr != nil && !noProxy {
 		snap.ProxyError = proxyErr.Error()
 	} else {
 		snap.ProxyError = ""
@@ -145,8 +148,16 @@ func RefreshCpaAccount(ctx context.Context, instanceID int, name string) (*CpaAc
 
 	now := common.GetTimestamp()
 	snap.QuotaCheckedAt = now
-	if proxyErr != nil {
-		// No valid SOCKS proxy: do not let CPA reach Anthropic at all.
+	direct := false
+	if noProxy {
+		// No proxy_url at all: the user leaves test accounts like this on
+		// purpose, so read-only quota queries still go through CPA (which
+		// connects directly). A proxy_url that is set but invalid stays
+		// blocked below, and token refresh / reset grants keep requiring SOCKS.
+		guard = directGuard(name)
+		direct = true
+	} else if proxyErr != nil {
+		// Invalid SOCKS proxy: do not let CPA reach Anthropic at all.
 		snap.QuotaError = proxyErr.Error()
 		snap.QuotaErrorStatus = 0
 		trackCpaProxyHealth(snap, proxyErr)
@@ -156,7 +167,10 @@ func RefreshCpaAccount(ctx context.Context, instanceID int, name string) (*CpaAc
 		return snap, nil
 	}
 	usage, status, usageErr := fetchClaudeJSON(ctx, client, guard, authIndex, claudeUsageURL, true)
-	trackCpaProxyHealth(snap, usageErr)
+	if !direct {
+		// Without a proxy there is no proxy health to track.
+		trackCpaProxyHealth(snap, usageErr)
+	}
 	if usageErr != nil {
 		snap.QuotaError = usageErr.Error()
 		snap.QuotaErrorStatus = status

@@ -21,7 +21,8 @@ import type { CpaAccount, CpaAlert, CpaCardUsage } from '../types'
 /**
  * ok: a valid socks5 proxy worked at the last check (green).
  * failed: the proxy is configured but the last check through it failed (red).
- * missing: no valid socks5 proxy, New API refuses to send anything (grey).
+ * missing: no valid socks5 proxy (grey). With no proxy_url at all, read-only
+ * quota queries still go through CPA directly; an invalid proxy_url blocks.
  */
 export type SocksState = 'ok' | 'failed' | 'missing'
 
@@ -39,6 +40,31 @@ export function socksStateOf(account: CpaAccount): SocksState {
   }
   if (error) return 'failed'
   return account.proxy_url ? 'ok' : 'missing'
+}
+
+/** True when a proxy_url is set but rejected (not socks5/socks5h). */
+export function isProxyBlocked(account: CpaAccount): boolean {
+  return (account.proxy_error ?? '').startsWith(BLOCKED_PREFIX)
+}
+
+/** Translation key for service.ErrCpaProxyBlocked. */
+export const PROXY_BLOCKED_KEY =
+  'socks5 proxy is invalid, blocked, request not sent'
+
+/** Error text for display: the blocked sentinel becomes a translation key. */
+export function quotaErrorKey(error: string): string | null {
+  return error.startsWith(BLOCKED_PREFIX) ? PROXY_BLOCKED_KEY : null
+}
+
+/**
+ * Quota data is live when the account has a working SOCKS proxy, or no
+ * proxy_url at all (test accounts left without one on purpose: quota queries
+ * then go through CPA directly). A failed or invalid proxy makes it stale.
+ */
+export function quotaLive(account: CpaAccount): boolean {
+  const socks = socksStateOf(account)
+  if (socks === 'ok') return true
+  return socks === 'missing' && !account.proxy_url && !isProxyBlocked(account)
 }
 
 export function cardUsageOf(

@@ -41,7 +41,7 @@ import {
   refreshAccount,
   setAccountDisabled,
 } from '../api'
-import { socksStateOf } from '../lib/card'
+import { isProxyBlocked, quotaLive, socksStateOf } from '../lib/card'
 import {
   PLAN_LABEL_KEYS,
   buildQuotaWindows,
@@ -75,6 +75,37 @@ const LEVEL_TEXT_CLASS = {
   danger: 'text-red-600 dark:text-red-400',
   unknown: 'text-muted-foreground',
 } as const
+
+/**
+ * Claude cards use Anthropic's warm palette (design option A, 2026-11-05):
+ * ivory surface, clay accents, serif title. Quota bars keep green / amber /
+ * red and the SOCKS badge keeps its colors, so safety states stay readable.
+ */
+const CLAUDE_CARD =
+  'border-[#E8E6DC] bg-[#FAF9F5] dark:border-[#45443F] dark:bg-[#30302E]'
+const CLAUDE_BADGE =
+  'bg-[#F5E6DD] text-[#B05730] dark:bg-[#4A3328] dark:text-[#E8A385]'
+const CLAUDE_SWITCH = 'data-checked:bg-[#D97757]'
+const CLAUDE_TRACK = 'bg-[#EDEBE3] dark:bg-[#45443F]'
+
+/** Claude spark mark (simplified, drawn in clay). */
+function ClaudeMark() {
+  return (
+    <svg
+      viewBox='0 0 24 24'
+      className='size-4 flex-none'
+      aria-hidden='true'
+      stroke='#D97757'
+      strokeWidth={2.6}
+      strokeLinecap='round'
+    >
+      <line x1='12' y1='2.5' x2='12' y2='21.5' />
+      <line x1='2.5' y1='12' x2='21.5' y2='12' />
+      <line x1='5.3' y1='5.3' x2='18.7' y2='18.7' />
+      <line x1='18.7' y1='5.3' x2='5.3' y2='18.7' />
+    </svg>
+  )
+}
 
 const RED_OUTLINE =
   'border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10'
@@ -116,8 +147,14 @@ export function AccountCard(props: AccountCardProps) {
   const ref = { instance_id: account.instance_id, name: account.name }
   const disabled = cred.disabled === true
   const socks = socksStateOf(account)
-  // Anthropic calls are refused without a working SOCKS proxy.
+  // Token refresh and reset grants still require a working SOCKS proxy.
   const proxyReady = socks === 'ok'
+  // Quota queries also run without any proxy_url (direct test accounts).
+  const live = quotaLive(account)
+  const blocked = isProxyBlocked(account)
+  const claude = account.is_claude
+  // Optimization C: no proxy_url at all = direct test account.
+  const direct = claude && !account.proxy_url && !blocked
 
   const windows = buildQuotaWindows(account.usage)
   const grants = buildResetGrants(account.reset_grants)
@@ -138,7 +175,7 @@ export function AccountCard(props: AccountCardProps) {
   const identity =
     credentialText(cred.email) ?? credentialText(cred.label) ?? account.name
   const socksAlert = props.alerts.find((a) => a.kind.startsWith('socks_'))
-  const stale = socks !== 'ok' && !!account.quota_observed_at
+  const stale = !live && !!account.quota_observed_at
   // Only one notice at a time, most urgent first.
   let notice: 'socks' | 'missing' | 'resets' | null = null
   if (socksAlert || (disabled && account.auto_disabled_at)) notice = 'socks'
@@ -215,6 +252,7 @@ export function AccountCard(props: AccountCardProps) {
           <div
             className={cn(
               'bg-card flex w-[300px] flex-none flex-col rounded-lg border px-3.5 py-3 text-[13px] shadow-xs',
+              claude && CLAUDE_CARD,
               hasResets && 'border-red-500',
               disabled && 'opacity-90'
             )}
@@ -225,15 +263,34 @@ export function AccountCard(props: AccountCardProps) {
         <div className='flex items-start justify-between gap-2'>
           <div className='min-w-0'>
             <div className='flex min-w-0 items-center gap-1.5'>
-              <span className='truncate font-medium' title={account.name}>
+              {claude && <ClaudeMark />}
+              <span
+                className={cn(
+                  'truncate font-medium',
+                  claude && 'font-serif text-[15px]'
+                )}
+                title={account.name}
+              >
                 {title}
               </span>
               {planLabel && (
                 <Badge
                   variant='secondary'
-                  className='h-[18px] px-1.5 text-[11px]'
+                  className={cn(
+                    'h-[18px] px-1.5 text-[11px]',
+                    claude && CLAUDE_BADGE
+                  )}
                 >
                   {planLabel}
+                </Badge>
+              )}
+              {direct && (
+                <Badge
+                  variant='outline'
+                  className='text-muted-foreground h-[18px] px-1.5 text-[11px]'
+                  title={t('No socks5 proxy configured, quota checks and chats go out directly')}
+                >
+                  {t('Direct')}
                 </Badge>
               )}
             </div>
@@ -247,6 +304,7 @@ export function AccountCard(props: AccountCardProps) {
           <div className='flex flex-none items-center gap-1.5'>
             <SocksBadge account={account} accountRef={ref} />
             <Switch
+              className={cn(claude && CLAUDE_SWITCH)}
               checked={!disabled}
               aria-label={t('Enabled')}
               disabled={actionMutation.isPending}
@@ -278,9 +336,9 @@ export function AccountCard(props: AccountCardProps) {
         )}
         {notice === 'missing' && (
           <Notice tone='amber'>
-            {t('No socks5 proxy configured, quota checks are blocked')}
-            <br />
-            {t('Chats relayed by CPA still go out directly')}
+            {blocked
+              ? t('socks5 proxy is invalid, quota checks are blocked')
+              : t('No socks5 proxy configured, quota checks and chats go out directly')}
           </Notice>
         )}
         {notice === 'resets' && (
@@ -297,7 +355,7 @@ export function AccountCard(props: AccountCardProps) {
         {/* Quota */}
         {account.is_claude && (
           <div className='mt-1'>
-            {account.quota_error && socks === 'ok' && (
+            {account.quota_error && live && (
               <div className='mb-1 text-xs text-red-600 dark:text-red-400'>
                 {account.quota_observed_at
                   ? t(
@@ -311,7 +369,7 @@ export function AccountCard(props: AccountCardProps) {
                     })}
               </div>
             )}
-            {(socks !== 'missing' || stale) &&
+            {(live || stale) &&
               windows.map((window) => {
                 const remaining = remainingPercent(window.usedPercent)
                 const level = stale ? 'unknown' : quotaLevel(remaining)
@@ -326,7 +384,12 @@ export function AccountCard(props: AccountCardProps) {
                         {remainingLabel(remaining, stale, t)}
                       </span>
                     </div>
-                    <div className='bg-muted mt-0.5 mb-1.5 h-[5px] overflow-hidden rounded-full'>
+                    <div
+                      className={cn(
+                        'mt-0.5 mb-1.5 h-[5px] overflow-hidden rounded-full',
+                        claude ? CLAUDE_TRACK : 'bg-muted'
+                      )}
+                    >
                       <div
                         className={cn('h-full', LEVEL_BAR_CLASS[level])}
                         style={{ width: `${remaining ?? 0}%` }}
@@ -335,7 +398,7 @@ export function AccountCard(props: AccountCardProps) {
                   </div>
                 )
               })}
-            {socks === 'ok' && !account.quota_error && windows.length === 0 && (
+            {live && !account.quota_error && windows.length === 0 && (
               <div className='text-muted-foreground text-xs'>
                 {account.quota_checked_at
                   ? t('No usage windows returned')

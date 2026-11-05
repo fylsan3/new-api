@@ -278,6 +278,18 @@ type socksGuard struct {
 	name      string
 	proxyURL  string
 	checkedAt time.Time
+	// allowDirect marks a guard for an account with no proxy_url at all.
+	// Only read-only quota queries may use it (user decision 2026-11-05:
+	// accounts left without a proxy on purpose are test accounts). Once a
+	// proxy_url appears it must be a valid SOCKS URL again.
+	allowDirect bool
+}
+
+// directGuard lets read-only quota queries of an account without any
+// proxy_url go through CPA (which then connects directly). Callers must only
+// use it after requireSocksProxy reported an empty proxy_url.
+func directGuard(name string) *socksGuard {
+	return &socksGuard{name: name, checkedAt: time.Now(), allowDirect: true}
 }
 
 // requireSocksProxy re-reads the credential's proxy_url from CPA right before
@@ -303,6 +315,10 @@ func (c *cpaClient) refreshGuard(ctx context.Context, guard *socksGuard) error {
 	}
 	fresh, err := c.requireSocksProxy(ctx, guard.name)
 	if err != nil {
+		if guard.allowDirect && fresh != nil && fresh.proxyURL == "" {
+			guard.checkedAt = time.Now()
+			return nil
+		}
 		return err
 	}
 	*guard = *fresh

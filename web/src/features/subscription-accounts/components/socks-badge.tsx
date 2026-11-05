@@ -33,7 +33,7 @@ import { handleServerError } from '@/lib/handle-server-error'
 import { cn } from '@/lib/utils'
 
 import { type AccountRef, revealAccountProxy } from '../api'
-import { type SocksState, socksStateOf } from '../lib/card'
+import { type SocksState, isProxyBlocked, socksStateOf } from '../lib/card'
 import type { CpaAccount } from '../types'
 
 const STATE_CLASS: Record<SocksState, { badge: string; dot: string }> = {
@@ -77,7 +77,9 @@ export function SocksBadge(props: {
   const stateText = {
     ok: t('SOCKS reachable at last check'),
     failed: t('SOCKS unreachable at last check'),
-    missing: t('No socks5 proxy configured, quota checks are blocked'),
+    missing: isProxyBlocked(props.account)
+      ? t('socks5 proxy is invalid, quota checks are blocked')
+      : t('No socks5 proxy configured, quota checks and chats go out directly'),
   }[state]
 
   return (

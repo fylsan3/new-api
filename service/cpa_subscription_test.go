@@ -115,6 +115,45 @@ func TestAPICallBlockedWithoutSocks(t *testing.T) {
 	assert.Equal(t, int32(1), apiCalls.Load())
 }
 
+// Accounts with no proxy_url at all may run read-only quota queries through
+// CPA via directGuard; a proxy_url that is set but invalid still blocks.
+func TestDirectGuardOnlyForEmptyProxy(t *testing.T) {
+	var apiCalls atomic.Int32
+	proxy := ""
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v8/management/credentials/download":
+			_, _ = w.Write([]byte(`{"proxy_url":"` + proxy + `"}`))
+		case "/v8/management/requests/api-call":
+			apiCalls.Add(1)
+			_, _ = w.Write([]byte(`{"status_code":200,"body":"{}"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	client := &cpaClient{baseURL: server.URL, secret: "k"}
+	ctx := context.Background()
+
+	guard := directGuard("a.json")
+	_, err := client.apiCall(ctx, guard, "1", http.MethodGet, claudeUsageURL, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), apiCalls.Load())
+
+	// Expired: still empty -> allowed.
+	guard.checkedAt = time.Now().Add(-2 * socksGuardTTL)
+	_, err = client.apiCall(ctx, guard, "1", http.MethodGet, claudeUsageURL, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), apiCalls.Load())
+
+	// Expired and a broken proxy_url appeared -> blocked, nothing sent.
+	guard.checkedAt = time.Now().Add(-2 * socksGuardTTL)
+	proxy = "http://1.2.3.4:8080"
+	_, err = client.apiCall(ctx, guard, "1", http.MethodGet, claudeUsageURL, nil, "")
+	assert.ErrorIs(t, err, ErrCpaProxyBlocked)
+	assert.Equal(t, int32(2), apiCalls.Load())
+}
+
 func TestStaggerDelaysWithinWindow(t *testing.T) {
 	window := 7 * time.Second
 	delays := staggerDelays(20, window)

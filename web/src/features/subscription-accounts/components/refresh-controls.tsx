@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2, RefreshCw } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -38,6 +38,9 @@ import type { CpaSettings } from '../types'
 
 const MIN_COOLDOWN_SECONDS = 60
 const MIN_INTERVAL_MINUTES = 10
+// Settings popover opens only after hovering the button this long, so a
+// quick pass over the button does not pop it up.
+const SETTINGS_HOVER_DELAY_MS = 5000
 
 type RefreshControlsProps = {
   settings: CpaSettings
@@ -46,7 +49,13 @@ type RefreshControlsProps = {
 }
 
 function useCooldownRemaining(settings: CpaSettings, serverNow: number) {
-  const offset = serverNow - Math.floor(Date.now() / 1000)
+  // Clock skew between server and browser, measured once per server
+  // timestamp. Recomputing it on every render would cancel out the elapsed
+  // time and freeze the countdown.
+  const offset = useMemo(
+    () => serverNow - Math.floor(Date.now() / 1000),
+    [serverNow]
+  )
   const compute = () => {
     if (!settings.last_refresh_all_at) return 0
     const now = Math.floor(Date.now() / 1000) + offset
@@ -168,7 +177,7 @@ export function RefreshControls(props: RefreshControlsProps) {
       <Popover>
         <PopoverTrigger
           openOnHover
-          delay={150}
+          delay={SETTINGS_HOVER_DELAY_MS}
           render={
             <Button
               size='sm'

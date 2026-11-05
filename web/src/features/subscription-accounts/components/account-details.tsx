@@ -16,7 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Copy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+
+import { copyToClipboard } from '@/lib/copy-to-clipboard'
+import dayjs from '@/lib/dayjs'
+import { cn } from '@/lib/utils'
 
 import { toIntlLocale } from '@/i18n/languages'
 import { formatCurrencyFromUSD } from '@/lib/currency'
@@ -27,7 +33,7 @@ import {
   formatTimestampToDate,
 } from '@/lib/format'
 
-import { credentialCount, lastRequestAt } from '../lib/card'
+import { credentialCount, lastRequestAt, quotaErrorKey } from '../lib/card'
 import {
   buildDollarWindows,
   buildExtraUsage,
@@ -44,11 +50,26 @@ export type AccountDetailsProps = {
   collecting: boolean
 }
 
+/** Optimization A: quota data older than this is flagged amber. */
+const QUOTA_STALE_SECONDS = 3600
+
+/** Dates in the popover drop the year when it is the current year. */
+function formatShort(ms: number) {
+  const d = dayjs(ms)
+  return d.format(d.year() === dayjs().year() ? 'MM-DD HH:mm:ss' : 'YYYY-MM-DD HH:mm:ss')
+}
+
 function formatIso(value: string | null | undefined) {
   if (!value) return '-'
   const ms = Date.parse(value)
   if (Number.isNaN(ms)) return '-'
-  return formatTimestampToDate(ms, 'milliseconds')
+  return formatShort(ms)
+}
+
+/** Time only when it is today, otherwise short date. */
+function formatClock(seconds: number) {
+  const d = dayjs(seconds * 1000)
+  return d.isSame(dayjs(), 'day') ? d.format('HH:mm:ss') : formatShort(seconds * 1000)
 }
 
 function formatMoney(value: number | null, currency = 'USD') {
@@ -83,7 +104,7 @@ export function AccountDetails(props: AccountDetailsProps) {
   const tokens = (value: number | undefined) =>
     value === undefined ? '-' : formatCompactNumber(value, locale)
 
-  const others: Array<[string, string]> = []
+  const others: Array<[string, string, string?]> = []
   if (extra && extra.isEnabled) {
     others.push([
       t('Extra usage'),
@@ -103,48 +124,92 @@ export function AccountDetails(props: AccountDetailsProps) {
     ])
   }
   if (account.quota_observed_at) {
+    const age = Math.floor(Date.now() / 1000) - account.quota_observed_at
+    const old = age > QUOTA_STALE_SECONDS
     others.push([
       t('Quota checked at'),
-      formatTimestampToDate(account.quota_observed_at),
+      old
+        ? `${formatShort(account.quota_observed_at * 1000)} (${t('over 1 hour ago')})`
+        : formatShort(account.quota_observed_at * 1000),
+      old ? 'text-amber-700 dark:text-amber-300' : undefined,
     ])
   }
-  if (account.quota_error) {
-    others.push([t('Quota check error'), account.quota_error])
+  const errorText = (error: string) => {
+    const key = quotaErrorKey(error)
+    return key ? t(key) : error
   }
+  const errors: string[] = []
+  if (account.quota_error) errors.push(errorText(account.quota_error))
   if (account.reset_grants_error) {
-    others.push([t('Reset grant check error'), account.reset_grants_error])
+    errors.push(
+      `${t('Reset grant check error')}: ${errorText(account.reset_grants_error)}`
+    )
   }
 
   return (
-    <div className='space-y-2.5 text-xs'>
-      <Section title={t('Account details')}>
-        <Row label={t('File name')} value={account.name} />
+    <div className='text-xs leading-normal'>
+      <div className='text-[13px] font-medium'>{t('Account details')}</div>
+      <div className='space-y-1'>
+        <div>
+          <div className='text-muted-foreground flex items-center justify-between'>
+            <span>{t('File name')}</span>
+            <button
+              type='button'
+              className='hover:text-foreground inline-flex cursor-pointer items-center gap-1 text-[11px]'
+              onClick={async () => {
+                if (await copyToClipboard(account.name)) toast.success(t('Copied'))
+              }}
+            >
+              <Copy className='size-3' />
+              {t('Copy')}
+            </button>
+          </div>
+          <div className='text-muted-foreground font-mono text-[11px] break-all'>
+            {account.name}
+          </div>
+        </div>
         <Row label={t('Source CPA')} value={props.instanceName} />
         {status && <Row label={t('Status')} value={status} />}
-        <Row
-          label={t('Proxy')}
-          value={account.proxy_url || t('Not configured')}
-          mono
-        />
+        {account.proxy_url ? (
+          <Row label={t('Proxy')} value={account.proxy_url} mono />
+        ) : (
+          <Row
+            label={t('Proxy')}
+            value={t('Not configured')}
+            valueClassName='text-amber-700 dark:text-amber-300'
+          />
+        )}
         <Row
           label={t('Last token refresh')}
           value={formatIso(text(cred.last_refresh))}
         />
-      </Section>
+      </div>
 
-      <Section title={t('Request stats')}>
+      <Section title={t('Request stats (since CPA start)')}>
         <Row
           label={t('Last request')}
           value={
             last
-              ? `${formatTimestampToDate(last)} (${formatTimestampRelative(last, 'seconds', locale)}${fromQueue ? '' : `, ${t('about, 10-minute buckets')}`})`
+              ? `${formatClock(last)} (${formatTimestampRelative(last, 'seconds', locale)})`
               : '-'
           }
+          title={
+            last
+              ? `${formatTimestampToDate(last)}${fromQueue ? '' : ` · ${t('about, 10-minute buckets')}`}`
+              : undefined
+          }
         />
-        <Row
-          label={t('Success / failed (since CPA start)')}
-          value={`${formatNumber(success)} / ${formatNumber(failed)}`}
-        />
+        <div className='flex justify-between gap-3'>
+          <span className='text-muted-foreground shrink-0'>
+            {t('Success / failed')}
+          </span>
+          <span className='text-right'>
+            {formatNumber(success)} /{' '}
+            <span className={cn(failed > 0 && 'text-red-600 dark:text-red-400')}>
+              {formatNumber(failed)}
+            </span>
+          </span>
+        </div>
       </Section>
 
       <Section title={t('Usage (30 days, New API collected)')}>
@@ -184,9 +249,7 @@ export function AccountDetails(props: AccountDetailsProps) {
           </>
         ) : (
           <p className='text-muted-foreground'>
-            {t(
-              'Spend needs "Collect usage" turned on for this CPA. Success/failed counts reset when CPA restarts.'
-            )}
+            {t('"Collect usage" is off for this CPA, no spend data yet.')}
           </p>
         )}
       </Section>
@@ -203,10 +266,23 @@ export function AccountDetails(props: AccountDetailsProps) {
         </Section>
       )}
 
-      {others.length > 0 && (
-        <Section title={t('Other')}>
-          {others.map(([label, value]) => (
-            <Row key={label} label={label} value={value} />
+      {(others.length > 0 || errors.length > 0) && (
+        <Section title={t('Quota check')}>
+          {others.map(([label, value, className]) => (
+            <Row
+              key={label}
+              label={label}
+              value={value}
+              valueClassName={className}
+            />
+          ))}
+          {errors.map((error) => (
+            <div
+              key={error}
+              className='rounded-md bg-amber-50 px-2 py-1.5 leading-normal break-all text-amber-900 dark:bg-amber-500/15 dark:text-amber-200'
+            >
+              {error}
+            </div>
           ))}
         </Section>
       )}
@@ -214,23 +290,32 @@ export function AccountDetails(props: AccountDetailsProps) {
   )
 }
 
+/** Small grey title with a divider above (agreed design v7). */
 function Section(props: { title: string; children: React.ReactNode }) {
   return (
-    <div className='space-y-1'>
-      <div className='text-foreground font-medium'>{props.title}</div>
+    <div className='mt-2.5 space-y-1 border-t pt-2'>
+      <div className='text-muted-foreground text-[11px]'>{props.title}</div>
       {props.children}
     </div>
   )
 }
 
-function Row(props: { label: string; value: string; mono?: boolean }) {
+function Row(props: {
+  label: string
+  value: string
+  mono?: boolean
+  title?: string
+  valueClassName?: string
+}) {
   return (
-    <div className='flex justify-between gap-3'>
+    <div className='flex justify-between gap-3' title={props.title}>
       <span className='text-muted-foreground shrink-0'>{props.label}</span>
       <span
-        className={
-          props.mono ? 'text-right font-mono break-all' : 'text-right break-all'
-        }
+        className={cn(
+          'min-w-0 text-right break-all',
+          props.mono && 'font-mono text-[11px]',
+          props.valueClassName
+        )}
       >
         {props.value}
       </span>
