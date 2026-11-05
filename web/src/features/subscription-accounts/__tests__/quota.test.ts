@@ -30,6 +30,7 @@ import {
   buildResetGrants,
   quotaLevel,
   remainingPercent,
+  resetCountdown,
   sortAccounts,
 } from '../lib/quota'
 import type { CpaAccount } from '../types'
@@ -171,5 +172,42 @@ describe('subscription accounts card helpers', () => {
     expect(compactCount(999_999)).toEqual({ text: '999.9k', compact: true })
     expect(compactCount(1_250_000)).toEqual({ text: '1.2M', compact: true })
     expect(compactCount(Number.NaN)).toEqual({ text: '0', compact: false })
+  })
+})
+
+describe('resetCountdown', () => {
+  const now = Date.parse('2026-11-05T10:00:00Z')
+
+  it('returns null for unknown or invalid times', () => {
+    expect(resetCountdown(null, now)).toBeNull()
+    expect(resetCountdown('not a date', now)).toBeNull()
+  })
+
+  it('reads "soon" once the reset time has passed', () => {
+    expect(resetCountdown('2026-11-05T10:00:00Z', now)).toEqual({ kind: 'soon' })
+    expect(resetCountdown('2026-11-05T09:00:00Z', now)).toEqual({ kind: 'soon' })
+  })
+
+  it('rounds up to whole minutes', () => {
+    expect(resetCountdown('2026-11-05T10:00:20Z', now)).toEqual({
+      kind: 'minutes',
+      minutes: 1,
+    })
+  })
+
+  it('uses hours and minutes under a day', () => {
+    expect(resetCountdown('2026-11-05T12:14:00Z', now)).toEqual({
+      kind: 'hours',
+      hours: 2,
+      minutes: 14,
+    })
+  })
+
+  it('uses days and hours from one day on', () => {
+    expect(resetCountdown('2026-11-08T15:30:00Z', now)).toEqual({
+      kind: 'days',
+      days: 3,
+      hours: 5,
+    })
   })
 })

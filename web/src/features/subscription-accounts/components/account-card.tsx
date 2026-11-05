@@ -57,6 +57,7 @@ import type {
 } from '../types'
 import { AccountDetails } from './account-details'
 import { ModelsDialog } from './models-dialog'
+import { ResetCountdownLabel } from './reset-countdown'
 import { SocksBadge } from './socks-badge'
 import { StatsLine } from './stats-line'
 
@@ -378,9 +379,17 @@ export function AccountCard(props: AccountCardProps) {
                     key={window.id}
                     title={`${t('Resets at')} ${formatIso(window.resetsAt)}`}
                   >
-                    <div className='text-muted-foreground flex justify-between text-xs'>
-                      <span>{t(window.labelKey)}</span>
-                      <span className={LEVEL_TEXT_CLASS[level]}>
+                    <div className='text-muted-foreground flex justify-between gap-2 text-xs'>
+                      <span className='truncate'>
+                        {t(window.labelKey)}
+                        <ResetCountdownLabel
+                          resetsAt={window.resetsAt}
+                          stale={stale}
+                        />
+                      </span>
+                      <span
+                        className={cn('shrink-0', LEVEL_TEXT_CLASS[level])}
+                      >
                         {remainingLabel(remaining, stale, t)}
                       </span>
                     </div>

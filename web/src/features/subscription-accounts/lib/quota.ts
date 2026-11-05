@@ -221,6 +221,33 @@ export function buildResetGrants(
   }
 }
 
+export type ResetCountdown =
+  | { kind: 'soon' }
+  | { kind: 'days'; days: number; hours: number }
+  | { kind: 'hours'; hours: number; minutes: number }
+  | { kind: 'minutes'; minutes: number }
+
+/**
+ * Time left until a quota window resets, for the card label. Past or
+ * near-zero times read "resetting soon"; unknown times return null.
+ */
+export function resetCountdown(
+  resetsAt: string | null | undefined,
+  nowMs: number
+): ResetCountdown | null {
+  if (!resetsAt) return null
+  const target = Date.parse(resetsAt)
+  if (Number.isNaN(target)) return null
+  const totalMinutes = Math.ceil((target - nowMs) / 60_000)
+  if (totalMinutes <= 0) return { kind: 'soon' }
+  const days = Math.floor(totalMinutes / 1440)
+  const hours = Math.floor((totalMinutes % 1440) / 60)
+  const minutes = totalMinutes % 60
+  if (days > 0) return { kind: 'days', days, hours }
+  if (hours > 0) return { kind: 'hours', hours, minutes }
+  return { kind: 'minutes', minutes }
+}
+
 /** Remaining percent = 100 - used, clamped. */
 export function remainingPercent(usedPercent: number | null): number | null {
   if (usedPercent === null) return null
