@@ -83,7 +83,7 @@
 - 来源：CPA 每次对话（含流式，结束后）把 `Anthropic-Ratelimit-Unified-*` 响应头存到账号的 `quota.signals`，`/credentials` 返回。New API 不发任何额外请求。
 - 前端 `lib/quota.ts`：`buildPassiveQuota` 解析 5h / 7d 的 Utilization（0～1）、Reset（unix 秒）、Status；`buildEffectiveQuota` 在对话数据比手动刷新更新时替换同名的 5h / 7d 窗口，其余窗口（Opus、Sonnet 等）保留刷新结果。
 - 显示：额度条下方小字 `components/quota-source-line.tsx`（「来自对话」绿点 /「来自刷新」灰点 + 相对时间）；Status=rejected 显示红色「已限流」；重置时间已过视为满额并显示「已重置」。号池「最紧张账号」统计也改用这份数据。
-- 拿不到的：Opus / Sonnet 等细分额度、套餐类型、重置次数，仍靠刷新。Fable 是否有专属额度头**待核实**。
+- 拿不到的：Opus / Sonnet 等细分额度、套餐类型、重置次数，仍靠刷新。Fable：2026-11-06 生产实测，CPA 按模型存的 `claude-fable-5` 对话头只有 Credits / Overage / Reset，**没有使用百分比**，所以 Fable 额度仍靠刷新。
 
 ### 5.3 每日随机刷新（2026-11-06，`service/cpa_subscription_daily_refresh.go`）
 
