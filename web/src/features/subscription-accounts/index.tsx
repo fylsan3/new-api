@@ -68,7 +68,11 @@ export function SubscriptionAccounts() {
   const query = useQuery({
     queryKey: OVERVIEW_QUERY_KEY,
     queryFn: getOverview,
-    refetchInterval: (q) => (q.state.data?.refresh_all_running ? 3000 : 30000),
+    // Reads only New API's own cache (no CPA / Anthropic call). 5s per user
+    // decision 2026-11-06; react-query pauses it while the tab is hidden and
+    // refetches as soon as the tab is focused again.
+    refetchInterval: (q) => (q.state.data?.refresh_all_running ? 3000 : 5000),
+    refetchOnWindowFocus: true,
   })
 
   // Token breakdown for the hover details; one request for all cards.
@@ -211,7 +215,7 @@ export function SubscriptionAccounts() {
             </div>
             {data && (
               <RefreshControls
-                key={`${data.settings.refresh_all_cooldown_seconds}-${data.settings.auto_refresh_interval_minutes}`}
+                key={data.settings.refresh_all_cooldown_seconds}
                 settings={data.settings}
                 running={data.refresh_all_running}
                 serverNow={data.now}

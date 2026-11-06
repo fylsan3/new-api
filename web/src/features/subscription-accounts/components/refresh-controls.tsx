@@ -30,14 +30,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Switch } from '@/components/ui/switch'
 import { handleServerError } from '@/lib/handle-server-error'
 
 import { OVERVIEW_QUERY_KEY, refreshAll, updateSettings } from '../api'
 import type { CpaSettings } from '../types'
 
 const MIN_COOLDOWN_SECONDS = 60
-const MIN_INTERVAL_MINUTES = 10
 // Settings popover opens only after hovering the button this long, so a
 // quick pass over the button does not pop it up.
 const SETTINGS_HOVER_DELAY_MS = 5000
@@ -85,9 +83,6 @@ export function RefreshControls(props: RefreshControlsProps) {
   const [cooldownDraft, setCooldownDraft] = useState(
     String(Math.round(props.settings.refresh_all_cooldown_seconds / 60))
   )
-  const [intervalDraft, setIntervalDraft] = useState(
-    String(props.settings.auto_refresh_interval_minutes)
-  )
 
   const [settingsOpen, setSettingsOpen] = useState(false)
 
@@ -120,7 +115,6 @@ export function RefreshControls(props: RefreshControlsProps) {
       setCooldownDraft(
         String(Math.round(data.refresh_all_cooldown_seconds / 60))
       )
-      setIntervalDraft(String(data.auto_refresh_interval_minutes))
       invalidate()
     },
     onError: (error) => handleServerError(error),
@@ -136,14 +130,6 @@ export function RefreshControls(props: RefreshControlsProps) {
     })
   }
 
-  const saveInterval = () => {
-    const minutes = Math.max(
-      MIN_INTERVAL_MINUTES,
-      Math.floor(Number(intervalDraft) || MIN_INTERVAL_MINUTES)
-    )
-    settingsMutation.mutate({ auto_refresh_interval_minutes: minutes })
-  }
-
   const blocked = remaining > 0 || props.running || refreshMutation.isPending
   let label = t('Refresh all')
   if (props.running || refreshMutation.isPending) {
@@ -154,28 +140,6 @@ export function RefreshControls(props: RefreshControlsProps) {
 
   return (
     <div className='flex flex-wrap items-center gap-3'>
-      <div className='flex items-center gap-2 text-sm'>
-        <Switch
-          id='cpa-auto-refresh'
-          checked={props.settings.auto_refresh_enabled}
-          disabled={settingsMutation.isPending}
-          onCheckedChange={(checked) =>
-            settingsMutation.mutate({ auto_refresh_enabled: checked })
-          }
-        />
-        <Label htmlFor='cpa-auto-refresh'>{t('Background refresh')}</Label>
-        <Input
-          className='h-8 w-16'
-          type='number'
-          min={MIN_INTERVAL_MINUTES}
-          value={intervalDraft}
-          onChange={(event) => setIntervalDraft(event.target.value)}
-          onBlur={saveInterval}
-          aria-label={t('Interval (minutes)')}
-        />
-        <span className='text-muted-foreground'>{t('min')}</span>
-      </div>
-
       <Popover
         open={settingsOpen}
         onOpenChange={(open, details) => {

@@ -7546,6 +7546,15 @@
     "Not collecting": "Non activé",
     "Recent requests are near real time, with per-account tokens and spend.": "Les requêtes récentes sont quasi en temps réel, avec jetons et dépenses par compte.",
     "If off: no token or spend data on cards, and \"Recent request\" can lag up to 10 minutes.": "Si désactivé : pas de jetons ni de dépenses sur les cartes, et « Requête récente » peut avoir jusqu’à 10 minutes de retard.",
-    "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue": "Retire les enregistrements de la file d’usage CPA toutes les 15 secondes · nécessite « Statistiques d’usage » activé dans CPA · laissez désactivé si autre chose lit cette file"
+    "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue": "Retire les enregistrements de la file d’usage CPA toutes les 15 secondes · nécessite « Statistiques d’usage » activé dans CPA · laissez désactivé si autre chose lit cette file",
+    "From chat": "Depuis les conversations",
+    "From refresh": "Depuis l’actualisation",
+    "Reset done": "Réinitialisé",
+    "Rate limited": "Limité",
+    "Chat quota updated at": "Quota (conversations) mis à jour",
+    "Next auto refresh": "Prochaine actualisation auto",
+    "Done for today": "Terminé pour aujourd’hui",
+    "Last auto refresh": "Dernière actualisation auto",
+    "skipped or failed": "ignorée ou échouée"
   }
 }

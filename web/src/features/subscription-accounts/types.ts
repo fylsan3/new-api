@@ -90,6 +90,12 @@ export type CpaAccount = {
   proxy_fail_streak?: number
   auto_disabled_at?: number
   last_request_at?: number
+  /** Daily random plan / reset-grant refresh (unix seconds, server day). */
+  auto_refresh_day?: string
+  auto_refresh_plan?: number[]
+  auto_refresh_done?: number
+  auto_refresh_last_at?: number
+  auto_refresh_error?: string
   updated_at: number
 }
 
@@ -196,6 +202,10 @@ export type QuotaWindow = {
   labelKey: string
   usedPercent: number | null
   resetsAt: string | null
+  /** Anthropic rejected requests in this window (seen on a chat). */
+  limited?: boolean
+  /** The reset time has passed since the data was taken: shown as full. */
+  resetDone?: boolean
 }
 
 export type DollarWindow = {

@@ -27,7 +27,7 @@ import (
 // hourly aggregate per account. Costs are estimates at New API base prices.
 
 const (
-	cpaUsagePollInterval   = 15 * time.Second
+	cpaUsagePollInterval   = 5 * time.Second // user decision 2026-11-06
 	cpaUsagePageSize       = 500
 	cpaUsageMaxPages       = 20
 	cpaUsageRemoteCheckTTL = 5 * time.Minute

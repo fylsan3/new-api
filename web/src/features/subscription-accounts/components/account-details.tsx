@@ -36,8 +36,10 @@ import {
 import { credentialCount, lastRequestAt, quotaErrorKey } from '../lib/card'
 import {
   buildDollarWindows,
+  buildEffectiveQuota,
   buildExtraUsage,
-  buildQuotaWindows,
+  buildPassiveQuota,
+  nextAutoRefreshAt,
 } from '../lib/quota'
 import type { CpaAccount, CpaAccountStats, CpaCardUsage } from '../types'
 
@@ -94,7 +96,9 @@ export function AccountDetails(props: AccountDetailsProps) {
   const failed = credentialCount(cred.failed)
   const last = lastRequestAt(account)
   const fromQueue = (account.last_request_at ?? 0) > 0
-  const windows = buildQuotaWindows(account.usage)
+  const windows = buildEffectiveQuota(account, Date.now()).windows
+  const passive = buildPassiveQuota(account.credential)
+  const nextAuto = nextAutoRefreshAt(account)
   const dollarWindows = buildDollarWindows(account.usage)
   const extra = buildExtraUsage(account.usage)
   const stats = props.stats
@@ -132,6 +136,25 @@ export function AccountDetails(props: AccountDetailsProps) {
         ? `${formatShort(account.quota_observed_at * 1000)} (${t('over 1 hour ago')})`
         : formatShort(account.quota_observed_at * 1000),
       old ? 'text-amber-700 dark:text-amber-300' : undefined,
+    ])
+  }
+  if (passive) {
+    others.push([
+      t('Chat quota updated at'),
+      formatShort(passive.observedAt * 1000),
+    ])
+  }
+  if (account.is_claude && account.auto_refresh_day) {
+    others.push([
+      t('Next auto refresh'),
+      nextAuto ? formatClock(nextAuto) : t('Done for today'),
+    ])
+  }
+  if (account.auto_refresh_error) {
+    others.push([
+      t('Last auto refresh'),
+      `${account.auto_refresh_last_at ? formatClock(account.auto_refresh_last_at) : '-'} · ${t('skipped or failed')}`,
+      'text-amber-700 dark:text-amber-300',
     ])
   }
   const errorText = (error: string) => {

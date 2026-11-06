@@ -425,7 +425,13 @@ type CpaAccountSnapshot struct {
 	AutoDisabledAt  int64 `json:"auto_disabled_at,omitempty"`
 	// LastRequestAt is the newest relay request seen in the usage queue.
 	LastRequestAt int64 `json:"last_request_at,omitempty"`
-	UpdatedAt     int64 `json:"updated_at"`
+	// Daily random refresh of plan + reset grants (cpa_subscription_daily_refresh.go).
+	AutoRefreshDay    string  `json:"auto_refresh_day,omitempty"`
+	AutoRefreshPlan   []int64 `json:"auto_refresh_plan,omitempty"`
+	AutoRefreshDone   int     `json:"auto_refresh_done,omitempty"`
+	AutoRefreshLastAt int64   `json:"auto_refresh_last_at,omitempty"`
+	AutoRefreshError  string  `json:"auto_refresh_error,omitempty"`
+	UpdatedAt         int64   `json:"updated_at"`
 }
 
 func credentialString(cred map[string]any, key string) string {

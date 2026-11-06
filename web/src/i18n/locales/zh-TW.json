@@ -7546,6 +7546,15 @@
     "Not collecting": "未開啟",
     "Recent requests are near real time, with per-account tokens and spend.": "「最近請求」接近即時，可看到每個帳號的 token 和消費。",
     "If off: no token or spend data on cards, and \"Recent request\" can lag up to 10 minutes.": "不開啟的話：卡片上沒有 token / 消費資料，「最近請求」最多延遲 10 分鐘。",
-    "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue": "每 15 秒從 CPA 用量佇列取走記錄 · 需要 CPA「用量統計」已開 · 有別的程式在讀這個佇列時請保持關閉"
+    "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue": "每 15 秒從 CPA 用量佇列取走記錄 · 需要 CPA「用量統計」已開 · 有別的程式在讀這個佇列時請保持關閉",
+    "From chat": "來自對話",
+    "From refresh": "來自重新整理",
+    "Reset done": "已重置",
+    "Rate limited": "已限流",
+    "Chat quota updated at": "對話額度最後更新",
+    "Next auto refresh": "下次自動重新整理",
+    "Done for today": "今天已完成",
+    "Last auto refresh": "上次自動重新整理",
+    "skipped or failed": "已略過或失敗"
   }
 }

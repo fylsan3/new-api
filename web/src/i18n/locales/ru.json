@@ -7546,6 +7546,15 @@
     "Not collecting": "Не включено",
     "Recent requests are near real time, with per-account tokens and spend.": "Последние запросы почти в реальном времени, с токенами и расходами по аккаунтам.",
     "If off: no token or spend data on cards, and \"Recent request\" can lag up to 10 minutes.": "Если выключено: на карточках нет токенов и расходов, а «Последний запрос» может отставать до 10 минут.",
-    "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue": "Каждые 15 секунд забирает записи из очереди использования CPA · нужна включённая «Статистика использования» в CPA · не включайте, если эту очередь читает что-то ещё"
+    "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue": "Каждые 15 секунд забирает записи из очереди использования CPA · нужна включённая «Статистика использования» в CPA · не включайте, если эту очередь читает что-то ещё",
+    "From chat": "Из диалогов",
+    "From refresh": "Из обновления",
+    "Reset done": "Сброшено",
+    "Rate limited": "Ограничено",
+    "Chat quota updated at": "Квота из диалогов обновлена",
+    "Next auto refresh": "Следующее автообновление",
+    "Done for today": "На сегодня выполнено",
+    "Last auto refresh": "Последнее автообновление",
+    "skipped or failed": "пропущено или ошибка"
   }
 }

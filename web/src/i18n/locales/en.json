@@ -7546,6 +7546,15 @@
     "Not collecting": "Not collecting",
     "Recent requests are near real time, with per-account tokens and spend.": "Recent requests are near real time, with per-account tokens and spend.",
     "If off: no token or spend data on cards, and \"Recent request\" can lag up to 10 minutes.": "If off: no token or spend data on cards, and \"Recent request\" can lag up to 10 minutes.",
-    "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue": "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue"
+    "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue": "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue",
+    "From chat": "From chat",
+    "From refresh": "From refresh",
+    "Reset done": "Reset",
+    "Rate limited": "Rate limited",
+    "Chat quota updated at": "Chat quota updated at",
+    "Next auto refresh": "Next auto refresh",
+    "Done for today": "Done for today",
+    "Last auto refresh": "Last auto refresh",
+    "skipped or failed": "skipped or failed"
   }
 }

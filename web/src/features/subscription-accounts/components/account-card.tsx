@@ -44,7 +44,7 @@ import {
 import { isProxyBlocked, quotaLive, socksStateOf } from '../lib/card'
 import {
   PLAN_LABEL_KEYS,
-  buildQuotaWindows,
+  buildEffectiveQuota,
   buildResetGrants,
   quotaLevel,
   remainingPercent,
@@ -57,6 +57,7 @@ import type {
 } from '../types'
 import { AccountDetails } from './account-details'
 import { ModelsDialog } from './models-dialog'
+import { QuotaSourceLine } from './quota-source-line'
 import { ResetCountdownLabel } from './reset-countdown'
 import { SocksBadge } from './socks-badge'
 import { StatsLine } from './stats-line'
@@ -157,7 +158,9 @@ export function AccountCard(props: AccountCardProps) {
   // Optimization C: no proxy_url at all = direct test account.
   const direct = claude && !account.proxy_url && !blocked
 
-  const windows = buildQuotaWindows(account.usage)
+  const quota = buildEffectiveQuota(account, Date.now())
+  const windows = quota.windows
+  const fromChat = quota.source === 'chat'
   const grants = buildResetGrants(account.reset_grants)
   const resetsLeft = grants?.resetsLeft ?? 0
   const hasResets = resetsLeft > 0
@@ -176,7 +179,9 @@ export function AccountCard(props: AccountCardProps) {
   const identity =
     credentialText(cred.email) ?? credentialText(cred.label) ?? account.name
   const socksAlert = props.alerts.find((a) => a.kind.startsWith('socks_'))
-  const stale = !live && !!account.quota_observed_at
+  // Chat-observed quota is real upstream data even when the proxy check
+  // failed later, so it is never greyed as stale.
+  const stale = !live && !fromChat && !!account.quota_observed_at
   // Only one notice at a time, most urgent first.
   let notice: 'socks' | 'missing' | 'resets' | null = null
   if (socksAlert || (disabled && account.auto_disabled_at)) notice = 'socks'
@@ -370,7 +375,7 @@ export function AccountCard(props: AccountCardProps) {
                     })}
               </div>
             )}
-            {(live || stale) &&
+            {(live || stale || fromChat) &&
               windows.map((window) => {
                 const remaining = remainingPercent(window.usedPercent)
                 const level = stale ? 'unknown' : quotaLevel(remaining)
@@ -382,10 +387,22 @@ export function AccountCard(props: AccountCardProps) {
                     <div className='text-muted-foreground flex justify-between gap-2 text-xs'>
                       <span className='truncate'>
                         {t(window.labelKey)}
-                        <ResetCountdownLabel
-                          resetsAt={window.resetsAt}
-                          stale={stale}
-                        />
+                        {window.resetDone ? (
+                          <span className='text-muted-foreground/80'>
+                            {' · '}
+                            {t('Reset done')}
+                          </span>
+                        ) : (
+                          <ResetCountdownLabel
+                            resetsAt={window.resetsAt}
+                            stale={stale}
+                          />
+                        )}
+                        {window.limited && (
+                          <span className='ml-1 rounded border border-red-200 bg-red-50 px-1 text-[11px] text-red-600 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-300'>
+                            {t('Rate limited')}
+                          </span>
+                        )}
                       </span>
                       <span
                         className={cn('shrink-0', LEVEL_TEXT_CLASS[level])}
@@ -407,6 +424,12 @@ export function AccountCard(props: AccountCardProps) {
                   </div>
                 )
               })}
+            {(live || stale || fromChat) && windows.length > 0 && (
+              <QuotaSourceLine
+                source={quota.source}
+                observedAt={quota.observedAt}
+              />
+            )}
             {live && !account.quota_error && windows.length === 0 && (
               <div className='text-muted-foreground text-xs'>
                 {account.quota_checked_at

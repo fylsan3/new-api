@@ -254,6 +254,104 @@ export function remainingPercent(usedPercent: number | null): number | null {
   return Math.min(100, Math.max(0, 100 - usedPercent))
 }
 
+// ---- passive quota seen on chats (design draft 2026-11-06, section 1) ----
+
+/**
+ * CPA records the `anthropic-ratelimit-unified-*` headers of every Claude
+ * reply in credential.quota.signals (header names canonicalised). Only the
+ * 5-hour and 7-day windows are carried there; utilization is a 0-1 fraction
+ * and reset is unix seconds.
+ */
+const SIGNAL_PREFIX = 'Anthropic-Ratelimit-Unified-'
+const PASSIVE_WINDOWS = [
+  { tag: '5h', id: 'five-hour', labelKey: '5-hour limit' },
+  { tag: '7d', id: 'seven-day', labelKey: '7-day limit' },
+] as const
+
+export type PassiveQuota = {
+  observedAt: number
+  windows: QuotaWindow[]
+}
+
+function signalOf(signals: Rec, name: string): string | null {
+  const wanted = `${SIGNAL_PREFIX}${name}`.toLowerCase()
+  for (const [key, value] of Object.entries(signals)) {
+    if (key.toLowerCase() === wanted) return toStr(value)
+  }
+  return null
+}
+
+/** Passive quota from the CPA credential, or null when none was seen yet. */
+export function buildPassiveQuota(
+  credential: Rec | undefined
+): PassiveQuota | null {
+  const quota = credential && isRecord(credential.quota) ? credential.quota : null
+  const signals = quota && isRecord(quota.signals) ? quota.signals : null
+  const observedMs = Date.parse(toStr(quota?.observed_at) ?? '')
+  if (!signals || Number.isNaN(observedMs)) return null
+  const windows: QuotaWindow[] = []
+  for (const { tag, id, labelKey } of PASSIVE_WINDOWS) {
+    const fraction = toNumber(signalOf(signals, `${tag}-Utilization`))
+    if (fraction === null) continue
+    const resetSec = toNumber(signalOf(signals, `${tag}-Reset`))
+    windows.push({
+      id,
+      labelKey,
+      usedPercent: fraction * 100,
+      resetsAt: resetSec ? new Date(resetSec * 1000).toISOString() : null,
+      limited:
+        (signalOf(signals, `${tag}-Status`) ?? '').toLowerCase() === 'rejected',
+    })
+  }
+  if (windows.length === 0) return null
+  return { observedAt: Math.floor(observedMs / 1000), windows }
+}
+
+export type EffectiveQuota = {
+  windows: QuotaWindow[]
+  /** Where the 5-hour / 7-day bars come from; null when nothing is known. */
+  source: 'chat' | 'refresh' | null
+  /** Seconds timestamp of that source. */
+  observedAt: number
+}
+
+/**
+ * Quota shown on the card: the newer of the chat-observed and the refreshed
+ * 5-hour / 7-day windows; other windows (Opus, Sonnet, Fable ...) always come
+ * from the refresh. A window whose reset time has passed reads as full.
+ */
+export function buildEffectiveQuota(
+  account: CpaAccount,
+  nowMs: number
+): EffectiveQuota {
+  const refreshed = buildQuotaWindows(account.usage)
+  const refreshedAt = account.quota_observed_at ?? 0
+  const passive = buildPassiveQuota(account.credential)
+  let windows = refreshed
+  let source: EffectiveQuota['source'] = refreshed.length ? 'refresh' : null
+  let observedAt = refreshed.length ? refreshedAt : 0
+  if (passive && passive.observedAt > refreshedAt) {
+    const replaced = new Set(passive.windows.map((w) => w.id))
+    const rest = refreshed.filter((w) => !replaced.has(w.id))
+    windows = [...passive.windows, ...rest]
+    source = 'chat'
+    observedAt = passive.observedAt
+  }
+  windows = windows.map((window) => {
+    const resetMs = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN
+    if (Number.isNaN(resetMs) || resetMs > nowMs) return window
+    return { ...window, usedPercent: 0, limited: false, resetDone: true }
+  })
+  return { windows, source, observedAt }
+}
+
+/** Next planned daily refresh (seconds), or null when today's are done. */
+export function nextAutoRefreshAt(account: CpaAccount): number | null {
+  const plan = account.auto_refresh_plan ?? []
+  const done = account.auto_refresh_done ?? 0
+  return done < plan.length ? plan[done] : null
+}
+
 export type QuotaLevel = 'ok' | 'warn' | 'danger' | 'unknown'
 
 /**

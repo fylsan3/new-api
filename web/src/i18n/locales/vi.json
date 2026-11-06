@@ -7546,6 +7546,15 @@
     "Not collecting": "Chưa bật",
     "Recent requests are near real time, with per-account tokens and spend.": "Yêu cầu gần đây gần như thời gian thực, kèm token và chi tiêu theo tài khoản.",
     "If off: no token or spend data on cards, and \"Recent request\" can lag up to 10 minutes.": "Nếu tắt: thẻ không có dữ liệu token / chi tiêu, và «Yêu cầu gần đây» có thể trễ tới 10 phút.",
-    "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue": "Cứ 15 giây lấy bản ghi khỏi hàng đợi sử dụng CPA · cần bật «Thống kê sử dụng» trong CPA · để tắt nếu có chương trình khác đọc hàng đợi này"
+    "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue": "Cứ 15 giây lấy bản ghi khỏi hàng đợi sử dụng CPA · cần bật «Thống kê sử dụng» trong CPA · để tắt nếu có chương trình khác đọc hàng đợi này",
+    "From chat": "Từ hội thoại",
+    "From refresh": "Từ làm mới",
+    "Reset done": "Đã đặt lại",
+    "Rate limited": "Bị giới hạn",
+    "Chat quota updated at": "Hạn mức từ hội thoại cập nhật",
+    "Next auto refresh": "Lần tự làm mới tiếp theo",
+    "Done for today": "Đã xong hôm nay",
+    "Last auto refresh": "Lần tự làm mới trước",
+    "skipped or failed": "bỏ qua hoặc thất bại"
   }
 }

@@ -33,7 +33,6 @@ var (
 const (
 	cpaRefreshAllMinSpread = 5 * time.Second
 	cpaRefreshAllMaxSpread = 10 * time.Second
-	cpaAutoMaxJitter       = 10 * time.Minute
 	cpaClaimRetryWindow    = 10 * time.Minute
 	cpaClaimTimeout        = 25 * time.Second
 )
@@ -102,6 +101,53 @@ func SyncAllCpaInstances(ctx context.Context) map[int]error {
 		}
 	}
 	return errs
+}
+
+// RefreshCpaAccountWithCredential is the single-card "Refresh" button: it
+// first re-reads this account's credential (success / failed counts,
+// recent_requests, disabled) from the CPA list, then runs the normal refresh.
+// Refresh-all and auto-refresh already sync the whole list once beforehand,
+// so they keep calling RefreshCpaAccount directly. A failed list read does
+// not fail the refresh; the old credential is kept.
+func RefreshCpaAccountWithCredential(ctx context.Context, instanceID int, name string) (*CpaAccountSnapshot, error) {
+	if err := syncCpaAccountCredential(ctx, instanceID, name); err != nil {
+		common.SysLog(fmt.Sprintf("cpa subscription credential sync %s failed: %v", name, err))
+	}
+	return RefreshCpaAccount(ctx, instanceID, name)
+}
+
+// syncCpaAccountCredential updates only the named account's cached credential.
+// Unlike SyncCpaInstance it never prunes other accounts.
+func syncCpaAccountCredential(ctx context.Context, instanceID int, name string) error {
+	instance, err := model.GetCpaInstance(instanceID)
+	if err != nil {
+		return err
+	}
+	client, err := newCpaClient(instance)
+	if err != nil {
+		return err
+	}
+	files, err := client.listCredentials(ctx)
+	if err != nil {
+		return err
+	}
+	for _, raw := range files {
+		cred := filterCredential(raw)
+		if credentialString(cred, "name") != name {
+			continue
+		}
+		unlock := lockAccount(instanceID, name)
+		defer unlock()
+		snap, loadErr := loadSnapshot(instanceID, name)
+		if loadErr != nil {
+			return loadErr
+		}
+		snap.Credential = cred
+		snap.CredentialSyncedAt = common.GetTimestamp()
+		snap.IsClaude = isClaudeCredential(cred)
+		return saveSnapshot(snap)
+	}
+	return nil
 }
 
 // RefreshCpaAccount refreshes proxy, usage, plan and reset grants of one account.
@@ -368,52 +414,20 @@ func staggerDelays(n int, window time.Duration) []time.Duration {
 
 func IsCpaRefreshAllRunning() bool { return cpaRefreshAllBusy.Load() }
 
-// StartCpaSubscriptionScheduler runs background auto-refresh on the master
-// node. Every account gets an extra random delay of 0-10 minutes.
+// StartCpaSubscriptionScheduler starts the master-node background jobs: the
+// usage queue collector, the credential list sync (which also carries the
+// passive quota seen on chats) and the daily random plan / reset-grant
+// refresh. Quota itself is never queried in the background (user decision
+// 2026-11-06).
 func StartCpaSubscriptionScheduler() {
 	cpaSchedulerOnce.Do(func() {
 		if !common.IsMasterNode {
 			return
 		}
 		startCpaUsageCollector()
-		gopool.Go(func() {
-			ticker := time.NewTicker(time.Minute)
-			defer ticker.Stop()
-			var nextRun int64
-			for range ticker.C {
-				setting, err := model.GetCpaSubscriptionSetting()
-				if err != nil || !setting.AutoRefreshEnabled {
-					nextRun = 0
-					continue
-				}
-				now := common.GetTimestamp()
-				if nextRun == 0 {
-					nextRun = now + int64(setting.AutoRefreshIntervalMinutes)*60
-					continue
-				}
-				if now < nextRun {
-					continue
-				}
-				nextRun = now + int64(setting.AutoRefreshIntervalMinutes)*60
-				runCpaAutoRefresh()
-			}
-		})
+		startCpaCredentialSync()
+		startCpaDailyRefresh()
 	})
-}
-
-func runCpaAutoRefresh() {
-	ctx := context.Background()
-	SyncAllCpaInstances(ctx)
-	for _, target := range refreshTargets() {
-		instanceID, name := target.InstanceID, target.Name
-		delay := time.Duration(rand.Int64N(int64(cpaAutoMaxJitter)))
-		gopool.Go(func() {
-			time.Sleep(delay)
-			if _, err := RefreshCpaAccount(ctx, instanceID, name); err != nil {
-				common.SysLog(fmt.Sprintf("cpa subscription auto refresh %s failed: %v", name, err))
-			}
-		})
-	}
 }
 
 // ---- write actions ----

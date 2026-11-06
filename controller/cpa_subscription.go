@@ -357,7 +357,7 @@ func RefreshCpaAccount(c *gin.Context) {
 	}
 	ctx, cancel := cpaRequestContext(c, 60*time.Second)
 	defer cancel()
-	snap, err := service.RefreshCpaAccount(ctx, req.InstanceID, req.Name)
+	snap, err := service.RefreshCpaAccountWithCredential(ctx, req.InstanceID, req.Name)
 	if err != nil {
 		common.ApiError(c, err)
 		return

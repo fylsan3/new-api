@@ -66,9 +66,36 @@
 
 - **全部刷新**：所有账号都查，但请求在 **5–10 秒内错开发出**，不一起发。
   冷却 **默认 1 分钟、最低 1 分钟**；冷却中按钮显示倒计时。**鼠标悬停按钮弹出设置，可改冷却时间。**
-- **后台自动刷新**：开关 **默认关**；间隔 **默认 10 分钟、最少 10 分钟**；每个账号额外 **随机延后 0–10 分钟**。
-  只在主节点运行。
+- ~~后台自动刷新~~：**2026-11-06 已去掉**（页面开关、分钟输入、`runCpaAutoRefresh` 都删了）。数据库里旧的 `auto_refresh_enabled` / `auto_refresh_interval_minutes` 字段保留不用，不影响升级。
+- 额度、套餐**只能手动刷新**；单卡「刷新」会先同步该账号的凭据信息（`RefreshCpaAccountWithCredential`）。
 - 每个账号的最新结果和时间都缓存在数据库，打开页面直接显示缓存，不会触发请求。
+
+### 5.1 实时数据（2026-11-06）
+
+| 项 | 频率 | 说明 |
+|---|---|---|
+| 凭据同步 `cpa_subscription_credential_sync.go` | **每 5 秒** | 读 CPA `/credentials`（只读 CPA 内存，不发往 Anthropic）：成功 / 失败数、最近请求、状态、对话额度。没变化不写库；账号锁被占用就跳过；不删除账号 |
+| 用量采集 `cpa_subscription_usage.go` | **每 5 秒**（原 15 秒） | 仍需每台 CPA 单独打开「采集用量」 |
+| 页面刷新 | **每 5 秒**（全部刷新进行中 3 秒），切回窗口立即刷新 | — |
+
+### 5.2 卡片显示对话额度（2026-11-06）
+
+- 来源：CPA 每次对话（含流式，结束后）把 `Anthropic-Ratelimit-Unified-*` 响应头存到账号的 `quota.signals`，`/credentials` 返回。New API 不发任何额外请求。
+- 前端 `lib/quota.ts`：`buildPassiveQuota` 解析 5h / 7d 的 Utilization（0～1）、Reset（unix 秒）、Status；`buildEffectiveQuota` 在对话数据比手动刷新更新时替换同名的 5h / 7d 窗口，其余窗口（Opus、Sonnet 等）保留刷新结果。
+- 显示：额度条下方小字 `components/quota-source-line.tsx`（「来自对话」绿点 /「来自刷新」灰点 + 相对时间）；Status=rejected 显示红色「已限流」；重置时间已过视为满额并显示「已重置」。号池「最紧张账号」统计也改用这份数据。
+- 拿不到的：Opus / Sonnet 等细分额度、套餐类型、重置次数，仍靠刷新。Fable 是否有专属额度头**待核实**。
+
+### 5.3 每日随机刷新（2026-11-06，`service/cpa_subscription_daily_refresh.go`）
+
+| 规则 | 值 |
+|---|---|
+| 查什么 | 只查 profile（套餐类型）+ `cedar_ember`（重置次数），**不查额度接口** |
+| 次数 | 每账号每天随机 1 次或 2 次，各 50% |
+| 时间 | 全天 0～24 点随机；两次至少隔 4 小时；当天剩余不足 4 小时只排 1 次 |
+| 检查频率 | 每 30 秒看一次是否到点；同时到点的账号在 20 秒内错开 |
+| 错过 | 服务停机等错过超过 10 分钟的时刻不补 |
+| 跳过 | 账号停用、正在全部刷新时；没配 SOCKS 或 SOCKS 不通 → 记录错误后跳过，**不直连** |
+| 存储 | 计划存在账号快照 `auto_refresh_day / plan / done / last_at / error`，悬停详情显示「下次自动刷新」「今天已完成」或「上次自动刷新 · 已跳过或失败」 |
 
 ### 6. 审计日志
 
@@ -90,7 +117,7 @@
 |---|---|
 | `router/api-router.go` | 新增 `/api/subscription-accounts` 路由组（`RootAuth`） |
 | `model/main.go` | `AutoMigrate` 增加 3 张表 |
-| `main.go` | 启动后台自动刷新调度器 `service.StartCpaSubscriptionScheduler()` |
+| `main.go` | 启动后台调度器 `service.StartCpaSubscriptionScheduler()`（凭据同步、用量采集、每日随机刷新） |
 | `web/src/hooks/use-sidebar-data.ts` | 侧边栏菜单项 |
 
 | `web/src/features/dashboard/components/overview/overview-dashboard.tsx` | 概览页**去掉设置引导**（「开始使用」三步、「首个 API 请求」、「推荐操作 / 保持平台就绪」、折叠进度条、标题栏「设置引导」按钮）；测试 `__tests__/setup-guide.test.tsx` 改为断言不再出现（2026-11-04） |
@@ -104,6 +131,8 @@ model/cpa_subscription.go            3 张表 + 读写
 service/cpa_subscription.go          CPA 客户端、加解密、快照
 service/cpa_subscription_ops.go      同步/刷新/调度/开关/刷新 token/重置额度
 service/cpa_subscription_test.go     单测
+service/cpa_subscription_credential_sync.go   每 5 秒同步凭据信息（2026-11-06）
+service/cpa_subscription_daily_refresh.go     每日随机刷新套餐 / 重置次数（2026-11-06）
 controller/cpa_subscription.go       接口 + 审计模板
 web/src/features/subscription-accounts/        页面、卡片、弹窗、额度计算、单测
 web/src/routes/_authenticated/subscription-accounts/index.tsx
@@ -120,7 +149,7 @@ web/src/routes/_authenticated/subscription-accounts/index.tsx
 | POST | `/instances/test` | 测试连接 |
 | POST | `/sync` | 同步账号列表 |
 | POST | `/refresh-all` | 全部刷新（冷却中返回 `cooldown_remaining`） |
-| PUT | `/settings` | 自动刷新 / 冷却设置 |
+| PUT | `/settings` | 冷却设置（自动刷新字段已不用） |
 | POST | `/account/refresh` | 刷新单个账号额度 |
 | GET | `/account/models` | 账号模型列表 |
 | POST | `/account/status` | 启用 / 关闭 |

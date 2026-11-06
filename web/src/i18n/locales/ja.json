@@ -7546,6 +7546,15 @@
     "Not collecting": "未有効",
     "Recent requests are near real time, with per-account tokens and spend.": "最近のリクエストはほぼリアルタイムで、アカウントごとの token と費用も表示されます。",
     "If off: no token or spend data on cards, and \"Recent request\" can lag up to 10 minutes.": "オフの場合：カードに token / 費用データがなく、「最近のリクエスト」は最大 10 分遅れます。",
-    "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue": "15 秒ごとに CPA 使用量キューからレコードを取り出します · CPA の「使用量統計」が必要 · 他のプログラムがこのキューを読む場合はオフのままに"
+    "Takes records from the CPA usage queue every 15 seconds · needs \"Usage statistics\" on in CPA · keep off if anything else reads this queue": "15 秒ごとに CPA 使用量キューからレコードを取り出します · CPA の「使用量統計」が必要 · 他のプログラムがこのキューを読む場合はオフのままに",
+    "From chat": "会話から取得",
+    "From refresh": "更新から取得",
+    "Reset done": "リセット済み",
+    "Rate limited": "制限中",
+    "Chat quota updated at": "会話の使用量 更新日時",
+    "Next auto refresh": "次回の自動更新",
+    "Done for today": "本日は完了",
+    "Last auto refresh": "前回の自動更新",
+    "skipped or failed": "スキップまたは失敗"
   }
 }

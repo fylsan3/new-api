@@ -25,7 +25,7 @@ import type {
 import { credentialCount, socksStateOf, type SocksState } from './card'
 import {
   PLAN_LABEL_KEYS,
-  buildQuotaWindows,
+  buildEffectiveQuota,
   buildResetGrants,
   remainingPercent,
 } from './quota'
@@ -161,7 +161,7 @@ export function tightestAccounts(
   const out: TightAccount[] = []
   for (const account of accounts) {
     if (!account.is_claude || account.credential?.disabled === true) continue
-    const window = buildQuotaWindows(account.usage).find(
+    const window = buildEffectiveQuota(account, nowSec * 1000).windows.find(
       (w) => w.id === windowId
     )
     const remaining = remainingPercent(window?.usedPercent ?? null)
