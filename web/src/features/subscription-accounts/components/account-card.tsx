@@ -65,6 +65,7 @@ import type {
 } from '../types'
 import { AccountDetails } from './account-details'
 import { ModelsDialog } from './models-dialog'
+import { ResetConfirmDialog } from './reset-confirm-dialog'
 import { QuotaSourceLine } from './quota-source-line'
 import { ResetCountdownLabel } from './reset-countdown'
 import { SocksBadge } from './socks-badge'
@@ -251,37 +252,6 @@ export function AccountCard(props: AccountCardProps) {
       desc: t('CPA will stop routing requests to {{name}}.', {
         name: account.name,
       }),
-    },
-    reset: {
-      title: t('Use one reset grant?'),
-      desc: (
-        <>
-          <span className='bg-muted/50 mt-1 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-md px-3 py-2.5'>
-            <span className='text-muted-foreground'>{t('Account')}</span>
-            <span className='text-foreground min-w-0 truncate' title={account.name}>
-              {identity}
-            </span>
-            <span className='text-muted-foreground'>{t('Remaining')}</span>
-            <span className='text-foreground tabular-nums'>
-              {t('{{from}} → {{to}}', {
-                from: t('{{count}} times', { count: resetsLeft }),
-                to: t('{{count}} times', { count: Math.max(resetsLeft - 1, 0) }),
-              })}
-            </span>
-            <span className='text-muted-foreground'>{t('Egress')}</span>
-            {direct ? (
-              <span className='text-amber-700 dark:text-amber-300'>
-                {t('Direct (no proxy configured)')}
-              </span>
-            ) : (
-              <span className='text-foreground'>{t('SOCKS proxy')}</span>
-            )}
-          </span>
-          <span className='mt-3 block'>
-            {t("Clears this account's rate limit. This cannot be undone.")}
-          </span>
-        </>
-      ),
     },
   }
 
@@ -517,7 +487,20 @@ export function AccountCard(props: AccountCardProps) {
           </Button>
         </div>
 
-        {pending && (
+        {pending === 'reset' && (
+          <ResetConfirmDialog
+            identity={identity}
+            fileName={account.name}
+            left={resetsLeft}
+            direct={direct}
+            loading={actionMutation.isPending}
+            onCancel={() => {
+              if (!actionMutation.isPending) setPending(null)
+            }}
+            onConfirm={() => actionMutation.mutate('reset')}
+          />
+        )}
+        {pending && pending !== 'reset' && (
           <ConfirmDialog
             open
             onOpenChange={(open) => {
