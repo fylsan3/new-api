@@ -5,7 +5,7 @@
 
 原则：**只新增、不改原功能**。官方功能和用法不变，官方文档请看上游仓库。
 
-- 镜像：`ghcr.io/fylsan3/new-api:v1.0.0-rc.47-sub.0ced1bb5`（x86_64，公开）
+- 镜像：`ghcr.io/fylsan3/new-api:v1.0.0-rc.47-sub.2d4c7cff`（x86_64，公开）
 - 详细技术说明：[CHANGES-SUBSCRIPTION.md](./CHANGES-SUBSCRIPTION.md)
 
 ---
