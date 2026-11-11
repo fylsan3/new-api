@@ -256,17 +256,30 @@ export function AccountCard(props: AccountCardProps) {
       title: t('Use one reset grant?'),
       desc: (
         <>
-          {t(
-            'This spends one Claude reset grant of {{name}} ({{left}} left) and clears its rate limit. This cannot be undone.',
-            { name: account.name, left: resetsLeft }
-          )}
-          {direct && (
-            <span className='mt-2 block rounded-md bg-amber-50 px-2 py-1.5 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200'>
-              {t(
-                'This is a direct account (no proxy configured); the grant is claimed through CPA directly.'
-              )}
+          <span className='bg-muted/50 mt-1 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-md px-3 py-2.5'>
+            <span className='text-muted-foreground'>{t('Account')}</span>
+            <span className='text-foreground min-w-0 truncate' title={account.name}>
+              {identity}
             </span>
-          )}
+            <span className='text-muted-foreground'>{t('Remaining')}</span>
+            <span className='text-foreground tabular-nums'>
+              {t('{{from}} → {{to}}', {
+                from: t('{{count}} times', { count: resetsLeft }),
+                to: t('{{count}} times', { count: Math.max(resetsLeft - 1, 0) }),
+              })}
+            </span>
+            <span className='text-muted-foreground'>{t('Egress')}</span>
+            {direct ? (
+              <span className='text-amber-700 dark:text-amber-300'>
+                {t('Direct (no proxy configured)')}
+              </span>
+            ) : (
+              <span className='text-foreground'>{t('SOCKS proxy')}</span>
+            )}
+          </span>
+          <span className='mt-3 block'>
+            {t("Clears this account's rate limit. This cannot be undone.")}
+          </span>
         </>
       ),
     },

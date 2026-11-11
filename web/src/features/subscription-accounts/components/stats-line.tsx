@@ -47,11 +47,12 @@ type StatsLineProps = {
 }
 
 /**
- * One-line summary: last request · success / failed · spend. Counts from
- * 10,000 on are shortened to k / M with a dashed underline; hovering them
- * shows the exact number. With usage collection on, success / failed are the
- * last 7 days from New API (survive CPA restarts) and hovering the failed
- * count lists the reasons; otherwise CPA's since-start counters as before.
+ * Two-line summary (design draft 2026-11-11, option A): last request and
+ * spend on the first line, success / failed counts on the second. Counts
+ * from 10,000 on are shortened to k / M with a dashed underline; hovering
+ * them shows the exact number. With usage collection on, success / failed
+ * are the last 7 days from New API (survive CPA restarts) and hovering the
+ * failed count lists the reasons; otherwise CPA's since-start counters.
  */
 export function StatsLine(props: StatsLineProps) {
   const { t, i18n } = useTranslation()
@@ -67,21 +68,34 @@ export function StatsLine(props: StatsLineProps) {
   const failedClass = 'text-red-600 dark:text-red-400'
 
   return (
-    <div className='text-muted-foreground truncate text-[11px]'>
-      {t('Last request')}{' '}
-      {last ? formatTimestampRelative(last, 'seconds', locale) : '-'}
-      {' · '}
-      {seven && `${t('Last 7 days')} `}
-      {t('Success')} <Count value={success} />
-      {' / '}
-      {seven && failed > 0 ? (
-        <FailReasons usage={props.usage} failed={failed} className={failedClass} />
-      ) : (
-        <Count value={failed} className={failedClass} />
-      )}
-      {' · '}
-      {t('Spend')}{' '}
-      {spend === null ? '-' : formatCurrencyFromUSD(spend, { compact: true })}
+    <div className='text-muted-foreground space-y-0.5 text-[11px]'>
+      <div className='flex items-baseline justify-between gap-3'>
+        <span className='min-w-0 truncate'>
+          {t('Last request')}{' '}
+          {last ? formatTimestampRelative(last, 'seconds', locale) : '-'}
+        </span>
+        <span className='flex-none'>
+          {t('Spend')}{' '}
+          {spend === null
+            ? '-'
+            : formatCurrencyFromUSD(spend, { compact: true })}
+        </span>
+      </div>
+      <div className='truncate'>
+        {seven && `${t('Last 7 days')} `}
+        {t('Success')} <Count value={success} />
+        {' · '}
+        {t('Failed')}{' '}
+        {seven && failed > 0 ? (
+          <FailReasons
+            usage={props.usage}
+            failed={failed}
+            className={failedClass}
+          />
+        ) : (
+          <Count value={failed} className={failedClass} />
+        )}
+      </div>
     </div>
   )
 }
@@ -132,11 +146,6 @@ function FailReasons(props: {
             </span>
           </div>
         ))}
-        <div className='mt-1.5 border-t border-current/20 pt-1.5 opacity-70'>
-          {t(
-            'Counted since this feature went live; earlier failures have totals only, no reasons'
-          )}
-        </div>
       </TooltipContent>
     </Tooltip>
   )
