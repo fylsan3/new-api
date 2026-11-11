@@ -140,3 +140,65 @@ export function lastRequestAt(account: CpaAccount): number {
   }
   return 0
 }
+
+/**
+ * Failure categories of the card tooltip / details (design 2026-11-11,
+ * option C). CPA records 500 when it has no status, so "upstream" may hold a
+ * few local errors.
+ */
+export type FailCategory = 'rate' | 'proxy' | 'upstream' | 'auth' | 'other'
+
+export const FAIL_CATEGORIES: FailCategory[] = [
+  'rate',
+  'proxy',
+  'upstream',
+  'auth',
+  'other',
+]
+
+/** Translation keys of the five failure categories. */
+export const FAIL_CATEGORY_KEYS = {
+  rate: '429 rate limited (quota used up / too frequent)',
+  proxy: '502 / connection failed (mostly SOCKS)',
+  upstream: '529 / 5xx upstream busy or error',
+  auth: '401 / 403 authorization invalid',
+  other: 'Other',
+} as const
+
+export function failCategoryOf(statusCode: number): FailCategory {
+  if (statusCode === 429) return 'rate'
+  if (statusCode === 502 || statusCode === 0) return 'proxy'
+  if (statusCode === 401 || statusCode === 403) return 'auth'
+  if (statusCode >= 500 && statusCode <= 599) return 'upstream'
+  return 'other'
+}
+
+/** Sums fail_reasons_7d into the five categories (all present, 0 when none). */
+export function groupFailReasons(
+  reasons: CpaCardUsage['fail_reasons_7d']
+): Record<FailCategory, number> {
+  const out: Record<FailCategory, number> = {
+    rate: 0,
+    proxy: 0,
+    upstream: 0,
+    auth: 0,
+    other: 0,
+  }
+  for (const reason of reasons ?? []) {
+    out[failCategoryOf(reason.status_code)] += reason.count
+  }
+  return out
+}
+
+/**
+ * Last-7-day success / failed from New API's hourly usage table; null when
+ * the usage queue is not collected for this account (caller falls back to
+ * CPA's since-start counters).
+ */
+export function sevenDayCounts(
+  usage: CpaCardUsage | null
+): { success: number; failed: number } | null {
+  if (!usage || typeof usage.requests_7d !== 'number') return null
+  const failed = usage.failed_7d ?? 0
+  return { success: Math.max(0, usage.requests_7d - failed), failed }
+}

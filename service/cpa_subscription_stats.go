@@ -292,20 +292,40 @@ func BuildCpaStats(days int) (*CpaStatsReport, error) {
 	return report, nil
 }
 
-// CpaCardUsage is the per-account usage shown on cards (last 30 days).
+// CpaCardUsage is the per-account usage shown on cards: tokens / cost over
+// the last 30 days, requests / failures over the last 7 days (design draft
+// 2026-11-11: read from New API's own hourly table so a CPA restart does not
+// zero them) and the 7-day failures grouped by upstream status code.
 type CpaCardUsage struct {
-	Requests int64   `json:"requests"`
-	Tokens   int64   `json:"tokens"`
-	CostUSD  float64 `json:"cost_usd"`
+	Requests      int64            `json:"requests"`
+	Tokens        int64            `json:"tokens"`
+	CostUSD       float64          `json:"cost_usd"`
+	Requests7d    int64            `json:"requests_7d"`
+	Failed7d      int64            `json:"failed_7d"`
+	FailReasons7d []CpaFailReason  `json:"fail_reasons_7d,omitempty"`
+	LastFail      *CpaLastFailInfo `json:"last_fail,omitempty"`
 }
 
-// ListCpaCardUsage returns last-30-day usage keyed by "instance_id/auth_index".
+type CpaFailReason struct {
+	StatusCode int   `json:"status_code"`
+	Count      int64 `json:"count"`
+}
+
+type CpaLastFailInfo struct {
+	At         int64  `json:"at"`
+	StatusCode int    `json:"status_code"`
+	Code       string `json:"code,omitempty"`
+}
+
+// ListCpaCardUsage returns card usage keyed by "instance_id/auth_index".
 func ListCpaCardUsage() (map[string]CpaCardUsage, error) {
 	now := time.Now().Unix()
 	rows, err := model.ListCpaUsageHourly(now-30*86400, now+3600)
 	if err != nil {
 		return nil, err
 	}
+	from7d := now - 7*86400
+	from7d -= from7d % 3600
 	out := map[string]CpaCardUsage{}
 	for i := range rows {
 		key := usageKey(rows[i].InstanceID, rows[i].AuthIndex)
@@ -313,6 +333,42 @@ func ListCpaCardUsage() (map[string]CpaCardUsage, error) {
 		entry.Requests += rows[i].Requests
 		entry.Tokens += rows[i].TotalTokens()
 		entry.CostUSD += rows[i].CostUSD
+		if rows[i].BucketTs >= from7d {
+			entry.Requests7d += rows[i].Requests
+			entry.Failed7d += rows[i].Failed
+		}
+		out[key] = entry
+	}
+	fails, err := model.ListCpaUsageFailHourly(from7d, now+3600)
+	if err != nil {
+		return nil, err
+	}
+	reasons := map[string]map[int]int64{}
+	for i := range fails {
+		row := &fails[i]
+		key := usageKey(row.InstanceID, row.AuthIndex)
+		if reasons[key] == nil {
+			reasons[key] = map[int]int64{}
+		}
+		reasons[key][row.StatusCode] += row.Count
+		entry := out[key]
+		if entry.LastFail == nil || row.LastAt > entry.LastFail.At {
+			entry.LastFail = &CpaLastFailInfo{At: row.LastAt, StatusCode: row.StatusCode, Code: row.LastCode}
+		}
+		out[key] = entry
+	}
+	for key, byStatus := range reasons {
+		entry := out[key]
+		for status, count := range byStatus {
+			entry.FailReasons7d = append(entry.FailReasons7d, CpaFailReason{StatusCode: status, Count: count})
+		}
+		sort.Slice(entry.FailReasons7d, func(i, j int) bool {
+			a, b := entry.FailReasons7d[i], entry.FailReasons7d[j]
+			if a.Count != b.Count {
+				return a.Count > b.Count
+			}
+			return a.StatusCode < b.StatusCode
+		})
 		out[key] = entry
 	}
 	return out, nil

@@ -24,7 +24,6 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import { IconBadge } from '@/components/ui/icon-badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -55,6 +54,8 @@ import { socksStateOf, type SocksState } from '../lib/card'
 import { accountDisplayName, buildCostSummary } from '../lib/pool'
 import { PLAN_LABEL_KEYS } from '../lib/quota'
 import type { CpaAccount, CpaAccountStats } from '../types'
+import { CycleSection } from './cycle-section'
+import { Section } from './stats-panel'
 
 const RANGE_OPTIONS = [7, 14, 30] as const
 
@@ -97,36 +98,6 @@ function usd(value: number, locale?: string): string {
 function remaining(used: number | undefined | null): number | null {
   if (used == null) return null
   return Math.min(100, Math.max(0, 100 - used))
-}
-
-function Section(props: {
-  icon: React.ReactNode
-  title: string
-  description?: string
-  actions?: React.ReactNode
-  children: React.ReactNode
-}) {
-  return (
-    <div className='overflow-hidden rounded-lg border'>
-      <div className='flex items-start justify-between gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
-        <div className='flex items-center gap-2'>
-          <IconBadge tone='info' size='sm'>
-            {props.icon}
-          </IconBadge>
-          <div>
-            <div className='text-sm font-semibold'>{props.title}</div>
-            {props.description && (
-              <div className='text-muted-foreground text-xs'>
-                {props.description}
-              </div>
-            )}
-          </div>
-        </div>
-        {props.actions}
-      </div>
-      {props.children}
-    </div>
-  )
 }
 
 function CostMetric(props: {
@@ -541,6 +512,9 @@ export function SubscriptionStatsSection() {
           />
         </div>
       </Section>
+
+      {/* ⑥ weekly cycle comparison (design 2026-11-11) */}
+      <CycleSection />
     </div>
   )
 }

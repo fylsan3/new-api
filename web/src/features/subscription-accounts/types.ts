@@ -99,11 +99,21 @@ export type CpaAccount = {
   updated_at: number
 }
 
+export type CpaFailReason = { status_code: number; count: number }
+
+export type CpaLastFailInfo = { at: number; status_code: number; code?: string }
+
 /** Last-30-day usage collected from the CPA usage queue. */
 export type CpaCardUsage = {
   requests: number
   tokens: number
   cost_usd: number
+  /** Last 7 days (design 2026-11-11, option D). */
+  requests_7d?: number
+  failed_7d?: number
+  /** Failures by HTTP status code, most first; 0 = no status. */
+  fail_reasons_7d?: CpaFailReason[]
+  last_fail?: CpaLastFailInfo
 }
 
 export type CpaAlert = {
@@ -230,4 +240,43 @@ export type ResetGrantInfo = {
   resetsTotal: number
   resetsLeft: number
   endsAt: string | null
+  /** Upstream flags; null when not reported. */
+  usableNow?: boolean | null
+  paused?: boolean | null
+}
+
+/** One weekly period on the cycle comparison tab. */
+export type CpaCycleRow = {
+  id: number
+  start_ts: number
+  end_ts: number
+  open: boolean
+  /** '' while open; natural | manual_reset | plan_change. */
+  end_reason: string
+  plan_type: string
+  tokens: number
+  cache_read_tokens: number
+  used_percent: number | null
+  percent_at: number
+  /** refresh | chat */
+  percent_source: string
+  hit_limit: boolean
+  estimated_full: number | null
+  change_percent: number | null
+  backfilled: boolean
+}
+
+export type CpaCycleWindow = { window: string; cycles: CpaCycleRow[] }
+
+export type CpaCycleAccount = {
+  instance_id: number
+  name: string
+  email?: string
+  plan_type?: string
+  windows: CpaCycleWindow[]
+}
+
+export type CpaCycleReport = {
+  min_percent: number
+  accounts: CpaCycleAccount[]
 }

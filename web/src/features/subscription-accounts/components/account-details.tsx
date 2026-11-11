@@ -33,15 +33,28 @@ import {
   formatTimestampToDate,
 } from '@/lib/format'
 
-import { credentialCount, lastRequestAt, quotaErrorKey } from '../lib/card'
+import {
+  FAIL_CATEGORIES,
+  FAIL_CATEGORY_KEYS,
+  credentialCount,
+  groupFailReasons,
+  lastRequestAt,
+  quotaErrorKey,
+} from '../lib/card'
 import {
   buildDollarWindows,
   buildEffectiveQuota,
   buildExtraUsage,
   buildPassiveQuota,
+  buildResetGrants,
   nextAutoRefreshAt,
 } from '../lib/quota'
-import type { CpaAccount, CpaAccountStats, CpaCardUsage } from '../types'
+import type {
+  CpaAccount,
+  CpaAccountStats,
+  CpaCardUsage,
+  ResetGrantInfo,
+} from '../types'
 
 export type AccountDetailsProps = {
   account: CpaAccount
@@ -102,6 +115,12 @@ export function AccountDetails(props: AccountDetailsProps) {
   const dollarWindows = buildDollarWindows(account.usage)
   const extra = buildExtraUsage(account.usage)
   const stats = props.stats
+  const resetGrants = account.is_claude
+    ? buildResetGrants(account.reset_grants)
+    : null
+  const failGroups = groupFailReasons(props.usage?.fail_reasons_7d)
+  const failed7d = props.usage?.failed_7d ?? 0
+  const lastFail = props.usage?.last_fail
   const status = [text(cred.status), text(cred.status_message)]
     .filter(Boolean)
     .join(' · ')
@@ -163,11 +182,6 @@ export function AccountDetails(props: AccountDetailsProps) {
   }
   const errors: string[] = []
   if (account.quota_error) errors.push(errorText(account.quota_error))
-  if (account.reset_grants_error) {
-    errors.push(
-      `${t('Reset grant check error')}: ${errorText(account.reset_grants_error)}`
-    )
-  }
 
   return (
     <div className='text-xs leading-normal'>
@@ -289,6 +303,73 @@ export function AccountDetails(props: AccountDetailsProps) {
         </Section>
       )}
 
+      {account.is_claude &&
+        (account.reset_grants_error ||
+          (resetGrants && resetGrants.grants.length > 0)) && (
+          <Section
+            title={
+              account.quota_checked_at
+                ? `${t('Reset grants')} (${t('fetched on refresh at {{time}}', {
+                    time: formatClock(account.quota_checked_at),
+                  })})`
+                : t('Reset grants')
+            }
+          >
+            {account.reset_grants_error ? (
+              <div className='rounded-md bg-amber-50 px-2 py-1.5 leading-normal break-all text-amber-900 dark:bg-amber-500/15 dark:text-amber-200'>
+                {`${t('Reset grant check error')}: ${errorText(account.reset_grants_error)}`}
+              </div>
+            ) : (
+              resetGrants?.grants.map((grant, i) => {
+                const stateKey = grantStateKey(grant)
+                const state = stateKey ? t(stateKey) : null
+                return (
+                  <Row
+                    key={grant.id}
+                    label={t('Grant {{n}} · {{left}} of {{total}} left', {
+                      n: i + 1,
+                      left: grant.resetsLeft,
+                      total: grant.resetsTotal,
+                    })}
+                    value={[
+                      grant.endsAt
+                        ? t('Ends {{time}}', { time: formatIso(grant.endsAt) })
+                        : null,
+                      state,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                    title={grant.label || undefined}
+                    valueClassName={cn(
+                      grant.paused === true &&
+                        'text-amber-700 dark:text-amber-300'
+                    )}
+                  />
+                )
+              })
+            )}
+          </Section>
+        )}
+
+      {props.collecting && failed7d > 0 && (
+        <Section title={t('Failure reasons, last 7 days')}>
+          {FAIL_CATEGORIES.filter((c) => failGroups[c] > 0).map((category) => (
+            <Row
+              key={category}
+              label={t(FAIL_CATEGORY_KEYS[category])}
+              value={formatNumber(failGroups[category])}
+            />
+          ))}
+          {lastFail && (
+            <p className='text-muted-foreground'>
+              {t('Latest')}: {formatShort(lastFail.at * 1000)} ·{' '}
+              {lastFail.status_code || '-'}
+              {lastFail.code ? ` · ${lastFail.code}` : ''}
+            </p>
+          )}
+        </Section>
+      )}
+
       {(others.length > 0 || errors.length > 0) && (
         <Section title={t('Quota check')}>
           {others.map(([label, value, className]) => (
@@ -311,6 +392,14 @@ export function AccountDetails(props: AccountDetailsProps) {
       )}
     </div>
   )
+}
+
+/** Translation key of a reset grant's state, null when not reported. */
+function grantStateKey(grant: ResetGrantInfo): string | null {
+  if (grant.paused === true) return 'Paused'
+  if (grant.usableNow === true) return 'Usable'
+  if (grant.usableNow === false) return 'Not usable now'
+  return null
 }
 
 /** Small grey title with a divider above (agreed design v7). */

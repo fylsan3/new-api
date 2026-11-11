@@ -97,6 +97,21 @@
 | 跳过 | 账号停用、正在全部刷新时；没配 SOCKS 或 SOCKS 不通 → 记录错误后跳过，**不直连** |
 | 存储 | 计划存在账号快照 `auto_refresh_day / plan / done / last_at / error`，悬停详情显示「下次自动刷新」「今天已完成」或「上次自动刷新 · 已跳过或失败」 |
 
+### 5.4 周期对比 / 近 7 天成功失败 / 失败原因 / 重置卡显示（2026-11-11）
+
+| 项 | 说明 |
+|---|---|
+| 卡片提示条 | 原来只显示一条（socks > missing > 重置卡），改为**叠加显示**；重置卡提示改紫色 + 🎫。「重置额度」按钮未配 SOCKS 仍置灰（不变） |
+| 成功 / 失败 | 有采集数据时改为**近 7 天**（New API 数据库），否则回退 CPA 原数据。30 天 token / 费用不动 |
+| 失败原因 | 解析 CPA 用量记录的 `fail.status_code / code`，按小时存 `cpa_usage_fail_hourly`（保留 90 天）。5 类：429 限流、502/0 代理、401/403 认证、5xx 上游、其他。卡片悬停 + 详情框显示，含最近一次失败；**只从本功能上线后开始统计** |
+| 详情「重置卡」栏 | 每张卡：剩余 / 总次数、到期、状态（已暂停 / 可用 / 暂不可用）；查询出错显示在此栏 |
+| 周期对比 | 统计页**底部新区块**（原页面无页签结构，未按设计稿做成页签）。窗口：seven_day + seven_day_opus / sonnet / fable。表 `cpa_quota_cycle` 长期保留 |
+| 周期口径 | token = 输入 + 输出 + 缓存写入，缓存读取单列；结束方式：自然到期 / 手动重置 / 套餐变更（插分隔行）；resets_at 漂移 ≤ 1 小时视为同一周期；被拒或用量 ≥ 99.5% 记为打满；用量 < 20% 不推算满额；和上期比 ≤ −5% 标红 |
+| 回填 | 历史周期由已有每小时用量回填，标「回填，仅供参考」 |
+| 数据来源 | 只统计经过 CPA 的用量；**不新增任何发往 Anthropic 的请求** |
+
+新接口：`GET /api/subscription-accounts/cycles`。新文件：`model/cpa_subscription_cycle.go`、`service/cpa_subscription_cycle.go`(+`_test`)、前端 `components/cycle-section.tsx`、`components/stats-panel.tsx`、`lib/cycle.ts`、`__tests__/cycle.test.ts`。`model/main.go` 的 AutoMigrate 增加 2 张表。
+
 ### 6. 审计日志
 
 8 类操作写入 New API 审计日志：CPA 添加/修改/删除、账号启用、账号关闭、刷新 token、重置额度、刷新设置修改。

@@ -209,6 +209,8 @@ export function buildResetGrants(
       resetsTotal: total,
       resetsLeft: left,
       endsAt: toStr(item.ends_at),
+      usableNow: toBool(item.usable_now),
+      paused: toBool(item.paused),
     })
   }
   return {

@@ -364,6 +364,7 @@ func SetApiRouter(router *gin.Engine) {
 			cpaSubscriptionRoute.POST("/account/reset-grant", controller.ClaimCpaAccountResetGrant)
 			cpaSubscriptionRoute.POST("/account/proxy", controller.RevealCpaAccountProxy)
 			cpaSubscriptionRoute.GET("/stats", controller.GetCpaSubscriptionStats)
+			cpaSubscriptionRoute.GET("/cycles", controller.GetCpaSubscriptionCycles)
 			cpaSubscriptionRoute.GET("/alerts", controller.ListCpaAlerts)
 			cpaSubscriptionRoute.POST("/alerts/ack", controller.AcknowledgeCpaAlerts)
 		}

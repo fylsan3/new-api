@@ -477,7 +477,11 @@ func saveSnapshot(snap *CpaAccountSnapshot) error {
 	if err != nil {
 		return err
 	}
-	return model.UpsertCpaAccountCache(snap.InstanceID, snap.Name, string(data))
+	if err := model.UpsertCpaAccountCache(snap.InstanceID, snap.Name, string(data)); err != nil {
+		return err
+	}
+	observeCpaCycles(snap)
+	return nil
 }
 
 // ListCpaSnapshots returns all cached accounts for the page.

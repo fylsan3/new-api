@@ -182,11 +182,12 @@ export function AccountCard(props: AccountCardProps) {
   // Chat-observed quota is real upstream data even when the proxy check
   // failed later, so it is never greyed as stale.
   const stale = !live && !fromChat && !!account.quota_observed_at
-  // Only one notice at a time, most urgent first.
-  let notice: 'socks' | 'missing' | 'resets' | null = null
-  if (socksAlert || (disabled && account.auto_disabled_at)) notice = 'socks'
-  else if (socks === 'missing' && account.is_claude) notice = 'missing'
-  else if (hasResets) notice = 'resets'
+  // Notices stack, most urgent first (design draft 2026-11-11, option C):
+  // a SOCKS notice no longer hides the reset-grant one.
+  const showSocksNotice = !!socksAlert || (disabled && !!account.auto_disabled_at)
+  const showMissingNotice =
+    !showSocksNotice && socks === 'missing' && account.is_claude
+  const showResetsNotice = hasResets
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: OVERVIEW_QUERY_KEY })
@@ -322,11 +323,15 @@ export function AccountCard(props: AccountCardProps) {
         </div>
 
         <div className='mt-1'>
-          <StatsLine account={account} usage={props.usage} />
+          <StatsLine
+            account={account}
+            usage={props.usage}
+            collecting={props.collecting}
+          />
         </div>
 
         {/* Notices */}
-        {notice === 'socks' && (
+        {showSocksNotice && (
           <Notice tone='red'>
             {t('Proxy unreachable, account disabled automatically')}
             <br />
@@ -340,15 +345,16 @@ export function AccountCard(props: AccountCardProps) {
             </span>
           </Notice>
         )}
-        {notice === 'missing' && (
+        {showMissingNotice && (
           <Notice tone='amber'>
             {blocked
               ? t('socks5 proxy is invalid, quota checks are blocked')
               : t('No socks5 proxy configured, quota checks and chats go out directly')}
           </Notice>
         )}
-        {notice === 'resets' && (
-          <Notice tone='red'>
+        {showResetsNotice && (
+          <Notice tone='violet'>
+            {'🎫 '}
             {t('Reset grants: {{left}} / {{total}}', {
               left: resetsLeft,
               total: resetsTotal,
@@ -516,14 +522,22 @@ export function AccountCard(props: AccountCardProps) {
   )
 }
 
-function Notice(props: { tone: 'red' | 'amber'; children: React.ReactNode }) {
+const NOTICE_TONES = {
+  red: 'bg-red-50 text-red-900 dark:bg-red-500/15 dark:text-red-200',
+  amber: 'bg-amber-50 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
+  violet:
+    'bg-violet-50 text-violet-900 dark:bg-violet-500/15 dark:text-violet-200',
+} as const
+
+function Notice(props: {
+  tone: keyof typeof NOTICE_TONES
+  children: React.ReactNode
+}) {
   return (
     <div
       className={cn(
         'my-2 rounded-md px-2 py-1.5 text-xs leading-normal break-all',
-        props.tone === 'red'
-          ? 'bg-red-50 text-red-900 dark:bg-red-500/15 dark:text-red-200'
-          : 'bg-amber-50 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200'
+        NOTICE_TONES[props.tone]
       )}
     >
       {props.children}

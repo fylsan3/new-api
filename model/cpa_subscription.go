@@ -100,7 +100,7 @@ func SaveCpaInstance(instance *CpaInstance) error {
 
 func DeleteCpaInstance(id int) error {
 	return DB.Transaction(func(tx *gorm.DB) error {
-		for _, table := range []any{&CpaAccountCache{}, &CpaUsageHourly{}, &CpaQuotaPoint{}, &CpaAlert{}} {
+		for _, table := range []any{&CpaAccountCache{}, &CpaUsageHourly{}, &CpaQuotaPoint{}, &CpaAlert{}, &CpaUsageFailHourly{}, &CpaQuotaCycle{}} {
 			if err := tx.Where("instance_id = ?", id).Delete(table).Error; err != nil {
 				return err
 			}

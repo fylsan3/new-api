@@ -25,6 +25,7 @@ import type {
   CpaInstance,
   CpaModel,
   CpaSettings,
+  CpaCycleReport,
   CpaStatsReport,
   ResetClaimResult,
   SubscriptionOverview,
@@ -136,6 +137,13 @@ export function getStats(days: number) {
   return unwrap(
     api.get<Envelope<CpaStatsReport>>(`${BASE}/stats`, { params: { days } })
   )
+}
+
+export const CYCLES_QUERY_KEY = ['subscription-accounts', 'cycles']
+
+/** Weekly quota periods of every Claude account (cycle comparison tab). */
+export function getCycles() {
+  return unwrap(api.get<Envelope<CpaCycleReport>>(`${BASE}/cycles`))
 }
 
 export function listAlerts() {

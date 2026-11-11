@@ -494,6 +494,16 @@ func GetCpaSubscriptionStats(c *gin.Context) {
 	common.ApiSuccess(c, report)
 }
 
+// GetCpaSubscriptionCycles serves the cycle comparison tab.
+func GetCpaSubscriptionCycles(c *gin.Context) {
+	report, err := service.BuildCpaCycleReport()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, report)
+}
+
 func ListCpaAlerts(c *gin.Context) {
 	alerts, err := model.ListOpenCpaAlerts()
 	if err != nil {

@@ -382,6 +382,8 @@ func migrateDB() error {
 		&CpaUsageHourly{},
 		&CpaQuotaPoint{},
 		&CpaAlert{},
+		&CpaUsageFailHourly{},
+		&CpaQuotaCycle{},
 	)
 	if err != nil {
 		return err

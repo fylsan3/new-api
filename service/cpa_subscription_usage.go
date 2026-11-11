@@ -55,7 +55,13 @@ type cpaUsageQueueRecord struct {
 	Provider  string    `json:"provider"`
 	Model     string    `json:"model"`
 	Alias     string    `json:"alias"`
-	Tokens    struct {
+	// Fail is set by CPA on failed requests (status_code defaults to 500
+	// when CPA cannot tell the upstream status).
+	Fail struct {
+		StatusCode int    `json:"status_code"`
+		Code       string `json:"code"`
+	} `json:"fail"`
+	Tokens struct {
 		InputTokens           int64  `json:"input_tokens"`
 		OutputTokens          int64  `json:"output_tokens"`
 		CacheReadTokens       int64  `json:"cache_read_tokens"`
@@ -135,6 +141,45 @@ type cpaUsageKey struct {
 	authIndex string
 	model     string
 	bucket    int64
+}
+
+type cpaFailKey struct {
+	authIndex string
+	bucket    int64
+	status    int
+}
+
+// aggregateCpaFailures folds failed queue records into hourly counts per
+// upstream status code (design draft 2026-11-11, "failure reasons").
+func aggregateCpaFailures(instanceID int, records []cpaUsageQueueRecord) map[cpaFailKey]*model.CpaUsageFailHourly {
+	rows := make(map[cpaFailKey]*model.CpaUsageFailHourly)
+	for i := range records {
+		rec := &records[i]
+		authIndex := strings.TrimSpace(rec.AuthIndex)
+		if !rec.Failed || authIndex == "" {
+			continue
+		}
+		ts := rec.Timestamp.Unix()
+		if rec.Timestamp.IsZero() || ts <= 0 {
+			ts = common.GetTimestamp()
+		}
+		status := rec.Fail.StatusCode
+		if status < 0 || status > 999 {
+			status = 0
+		}
+		key := cpaFailKey{authIndex: authIndex, bucket: ts - ts%3600, status: status}
+		row := rows[key]
+		if row == nil {
+			row = &model.CpaUsageFailHourly{InstanceID: instanceID, AuthIndex: authIndex, BucketTs: key.bucket, StatusCode: status}
+			rows[key] = row
+		}
+		row.Count++
+		if ts >= row.LastAt {
+			row.LastAt = ts
+			row.LastCode = truncateText(strings.TrimSpace(rec.Fail.Code), 64)
+		}
+	}
+	return rows
 }
 
 // aggregateCpaUsage folds queue records into hourly rows plus the newest
@@ -288,6 +333,11 @@ func storeCpaUsage(instanceID int, records []cpaUsageQueueRecord) error {
 			return err
 		}
 	}
+	for _, row := range aggregateCpaFailures(instanceID, records) {
+		if err := model.AddCpaUsageFailHourly(row); err != nil {
+			return err
+		}
+	}
 	if len(latest) == 0 {
 		return nil
 	}
@@ -319,6 +369,7 @@ var cpaUsageCollectorOnce sync.Once
 // startCpaUsageCollector polls every opted-in CPA on the master node.
 func startCpaUsageCollector() {
 	cpaUsageCollectorOnce.Do(func() {
+		gopool.Go(backfillCpaQuotaCycles)
 		gopool.Go(func() {
 			ticker := time.NewTicker(cpaUsagePollInterval)
 			defer ticker.Stop()
@@ -343,6 +394,8 @@ func startCpaUsageCollector() {
 					lastPrune = time.Now()
 					now := time.Now()
 					_ = model.PruneCpaStats(now.Add(-cpaUsageRetention).Unix(), now.Add(-cpaQuotaRetention).Unix())
+					_ = model.PruneCpaUsageFail(now.Add(-cpaUsageRetention).Unix())
+					closeExpiredCpaQuotaCycles(now.Unix())
 				}
 			}
 		})
