@@ -53,6 +53,13 @@ const STATE_CLASS: Record<SocksState, { badge: string; dot: string }> = {
   },
 }
 
+/** No proxy_url at all: a direct account (design draft 2026-11-11, B). */
+const DIRECT_CLASS = {
+  badge:
+    'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/50 dark:bg-amber-500/15 dark:text-amber-200',
+  dot: 'bg-amber-500',
+}
+
 /**
  * SOCKS status from the last check through CPA. No hover popup (the masked
  * address is already in the card's hover details); clicking fetches the full
@@ -66,6 +73,13 @@ export function SocksBadge(props: {
   const [full, setFull] = useState<string | null>(null)
   const [pinned, setPinned] = useState(false)
   const state = socksStateOf(props.account)
+  const blocked = isProxyBlocked(props.account)
+  // Badge look: a direct account shows amber "Direct"; an invalid proxy_url
+  // is a fault and shows red, like a failed check.
+  const direct = state === 'missing' && !blocked
+  let look = STATE_CLASS[state]
+  if (direct) look = DIRECT_CLASS
+  else if (blocked) look = STATE_CLASS.failed
   const masked = props.account.proxy_url || t('Not configured')
 
   const revealMutation = useMutation({
@@ -77,7 +91,7 @@ export function SocksBadge(props: {
   const stateText = {
     ok: t('SOCKS reachable at last check'),
     failed: t('SOCKS unreachable at last check'),
-    missing: isProxyBlocked(props.account)
+    missing: blocked
       ? t('socks5 proxy is invalid, quota checks are blocked')
       : t('No socks5 proxy configured, quota checks and chats go out directly'),
   }[state]
@@ -104,13 +118,13 @@ export function SocksBadge(props: {
             type='button'
             className={cn(
               'inline-flex h-4 shrink-0 cursor-pointer items-center gap-1 rounded-md border px-1.5 font-mono text-[11px] leading-none',
-              STATE_CLASS[state].badge
+              look.badge
             )}
           />
         }
       >
-        <span className={cn('size-1.5 rounded-full', STATE_CLASS[state].dot)} />
-        SOCKS
+        <span className={cn('size-1.5 rounded-full', look.dot)} />
+        {direct ? t('Direct') : 'SOCKS'}
       </PopoverTrigger>
       <PopoverContent align='end' className='w-72 space-y-1.5 text-xs'>
         <div className='font-medium'>{stateText}</div>

@@ -201,8 +201,10 @@ export function AccountCard(props: AccountCardProps) {
   // Notices stack, most urgent first (design draft 2026-11-11, option C):
   // a SOCKS notice no longer hides the reset-grant one.
   const showSocksNotice = !!socksAlert || (disabled && !!account.auto_disabled_at)
+  // Direct accounts need no notice: the amber "Direct" badge says it
+  // (design draft 2026-11-11, B). Only an invalid proxy_url is a fault.
   const showMissingNotice =
-    !showSocksNotice && socks === 'missing' && account.is_claude
+    !showSocksNotice && socks === 'missing' && blocked && account.is_claude
   const showResetsNotice = hasResets
 
   const invalidate = () =>
@@ -300,15 +302,6 @@ export function AccountCard(props: AccountCardProps) {
                   {planLabel}
                 </Badge>
               )}
-              {direct && (
-                <Badge
-                  variant='outline'
-                  className='text-muted-foreground h-[18px] px-1.5 text-[11px]'
-                  title={t('No socks5 proxy configured, quota checks and chats go out directly')}
-                >
-                  {t('Direct')}
-                </Badge>
-              )}
             </div>
             <div
               className='text-muted-foreground truncate text-xs'
@@ -356,9 +349,7 @@ export function AccountCard(props: AccountCardProps) {
         )}
         {showMissingNotice && (
           <Notice tone='amber'>
-            {blocked
-              ? t('socks5 proxy is invalid, quota checks are blocked')
-              : t('No socks5 proxy configured, quota checks and chats go out directly')}
+            {t('socks5 proxy is invalid, quota checks are blocked')}
           </Notice>
         )}
         {showResetsNotice && (
