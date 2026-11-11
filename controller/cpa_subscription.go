@@ -434,6 +434,7 @@ func ClaimCpaAccountResetGrant(c *gin.Context) {
 	if result != nil {
 		params["result"] = result.Result
 		params["grant_id"] = result.GrantID
+		params["direct"] = result.Direct
 	}
 	recordManageAudit(c, "cpa_subscription.reset_grant_claim", params)
 	if err != nil {

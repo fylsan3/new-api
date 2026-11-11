@@ -101,7 +101,7 @@
 
 | 项 | 说明 |
 |---|---|
-| 卡片提示条 | 原来只显示一条（socks > missing > 重置卡），改为**叠加显示**；重置卡提示改紫色 + 🎫。「重置额度」按钮未配 SOCKS 仍置灰（不变） |
+| 卡片提示条 | 原来只显示一条（socks > missing > 重置卡），改为**叠加显示**；重置卡提示改紫色 + 🎫。「重置额度」按钮未配 SOCKS 仍置灰（不变；5.5 起直连号可点） |
 | 成功 / 失败 | 有采集数据时改为**近 7 天**（New API 数据库），否则回退 CPA 原数据。30 天 token / 费用不动 |
 | 失败原因 | 解析 CPA 用量记录的 `fail.status_code / code`，按小时存 `cpa_usage_fail_hourly`（保留 90 天）。5 类：429 限流、502/0 代理、401/403 认证、5xx 上游、其他。卡片悬停 + 详情框显示，含最近一次失败；**只从本功能上线后开始统计** |
 | 详情「重置卡」栏 | 每张卡：剩余 / 总次数、到期、状态（已暂停 / 可用 / 暂不可用）；查询出错显示在此栏 |
@@ -111,6 +111,18 @@
 | 数据来源 | 只统计经过 CPA 的用量；**不新增任何发往 Anthropic 的请求** |
 
 新接口：`GET /api/subscription-accounts/cycles`。新文件：`model/cpa_subscription_cycle.go`、`service/cpa_subscription_cycle.go`(+`_test`)、前端 `components/cycle-section.tsx`、`components/stats-panel.tsx`、`lib/cycle.ts`、`__tests__/cycle.test.ts`。`model/main.go` 的 AutoMigrate 增加 2 张表。
+
+### 5.5 重置额度按钮 / 失败原因悬停框（2026-11-11）
+
+| 项 | 说明 |
+|---|---|
+| 直连号可领卡 | `proxy_url` **完全为空**的账号（直连号），领卡请求仍经 CPA `api-call` 发出，由 CPA 直连。填了但格式不对仍拦截；**刷新 token 仍必须 SOCKS**。`service/cpa_subscription_ops.go` 新增 `resetGrantGuard`，结果和审计日志多一项 `direct` |
+| 按钮状态 | 只有 SOCKS 不可用（非直连号）时置灰；灰按钮外包一层，悬停能看到原因 |
+| 提前提示（用户选 B） | 用上次刷新的重置卡数据判断：不符合条件 / 冷却中 / 卡暂停 / 未开始 / 已过期 / 暂不可用 / 额度没用满（对话显示已限流也算用满）。**只提示不置灰**，点击后由服务端判断。`lib/quota.ts` 的 `resetButtonHint` |
+| 确认框 | 直连号多一行黄色提示「该账号为直连号（未配置代理），本次经 CPA 直连领取」 |
+| 失败原因悬停框 | 原来内容被挤成横向多列、文字竖排，改为上下排列，0 次的行变淡，底注加分隔线 |
+
+测试：`TestResetGrantGuard`、`__tests__/reset-button.test.ts`。
 
 ### 6. 审计日志
 

@@ -7595,6 +7595,15 @@
     "In progress": "Đang diễn ra",
     "Not estimated (used < {{n}}%)": "Không ước tính (đã dùng < {{n}}%)",
     "429 used up, most accurate": "429 đã hết, chính xác nhất",
-    "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared": "{{date}} gói đổi từ {{from}} sang {{to}}; các dòng trên và dưới không so sánh"
+    "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared": "{{date}} gói đổi từ {{from}} sang {{to}}; các dòng trên và dưới không so sánh",
+    "This is a direct account (no proxy configured); the grant is claimed through CPA directly.": "Tài khoản kết nối trực tiếp (chưa cấu hình proxy); phiếu được nhận trực tiếp qua CPA.",
+    "Last refresh says so; the server checks again on click": "Theo lần làm mới gần nhất; máy chủ sẽ kiểm tra lại khi bấm",
+    "This account cannot use reset grants right now": "Tài khoản này hiện không thể dùng phiếu đặt lại",
+    "Cooling down, usable again after {{time}}": "Đang hồi, dùng lại được sau {{time}}",
+    "Reset grant paused by Anthropic": "Phiếu đặt lại bị Anthropic tạm dừng",
+    "Reset grant starts at {{time}}": "Phiếu đặt lại bắt đầu lúc {{time}}",
+    "Reset grant expired": "Phiếu đặt lại đã hết hạn",
+    "Reset grant not usable right now": "Phiếu đặt lại hiện không dùng được",
+    "Quota not used up yet; this grant works only after the limit is hit": "Hạn mức chưa dùng hết; phiếu này chỉ dùng được sau khi bị giới hạn"
   }
 }

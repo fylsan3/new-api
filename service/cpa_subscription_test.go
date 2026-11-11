@@ -154,6 +154,41 @@ func TestDirectGuardOnlyForEmptyProxy(t *testing.T) {
 	assert.Equal(t, int32(2), apiCalls.Load())
 }
 
+// Reset grants: SOCKS accounts as before; no proxy_url at all goes direct
+// through CPA; a set-but-invalid proxy_url is still blocked.
+func TestResetGrantGuard(t *testing.T) {
+	proxy := ""
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v8/management/credentials/download" {
+			_, _ = w.Write([]byte(`{"proxy_url":"` + proxy + `"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	client := &cpaClient{baseURL: server.URL, secret: "k"}
+	ctx := context.Background()
+
+	guard, direct, err := client.resetGrantGuard(ctx, "a.json")
+	require.NoError(t, err)
+	assert.True(t, direct)
+	assert.True(t, guard.allowDirect)
+
+	proxy = "socks5://u:p@1.2.3.4:1080"
+	guard, direct, err = client.resetGrantGuard(ctx, "a.json")
+	require.NoError(t, err)
+	assert.False(t, direct)
+	assert.False(t, guard.allowDirect)
+
+	for _, p := range []string{"direct", "http://1.2.3.4:8080", "socks5://1.2.3.4"} {
+		proxy = p
+		guard, direct, err = client.resetGrantGuard(ctx, "a.json")
+		assert.ErrorIs(t, err, ErrCpaProxyBlocked, p)
+		assert.Nil(t, guard, p)
+		assert.False(t, direct, p)
+	}
+}
+
 func TestStaggerDelaysWithinWindow(t *testing.T) {
 	window := 7 * time.Second
 	delays := staggerDelays(20, window)

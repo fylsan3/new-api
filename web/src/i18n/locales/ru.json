@@ -7595,6 +7595,15 @@
     "In progress": "Идёт",
     "Not estimated (used < {{n}}%)": "Не оценивается (использовано < {{n}}%)",
     "429 used up, most accurate": "429 исчерпано, точнее всего",
-    "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared": "{{date}} тариф изменён с {{from}} на {{to}}; строки выше и ниже не сравниваются"
+    "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared": "{{date}} тариф изменён с {{from}} на {{to}}; строки выше и ниже не сравниваются",
+    "This is a direct account (no proxy configured); the grant is claimed through CPA directly.": "Прямой аккаунт (прокси не настроен): купон запрашивается через CPA напрямую.",
+    "Last refresh says so; the server checks again on click": "По данным последнего обновления; сервер перепроверит при нажатии",
+    "This account cannot use reset grants right now": "Этот аккаунт сейчас не может использовать купоны сброса",
+    "Cooling down, usable again after {{time}}": "Пауза, снова доступно после {{time}}",
+    "Reset grant paused by Anthropic": "Купон сброса приостановлен Anthropic",
+    "Reset grant starts at {{time}}": "Купон сброса начнёт действовать {{time}}",
+    "Reset grant expired": "Срок купона сброса истёк",
+    "Reset grant not usable right now": "Купон сброса сейчас недоступен",
+    "Quota not used up yet; this grant works only after the limit is hit": "Лимит ещё не исчерпан; купон работает только после достижения лимита"
   }
 }

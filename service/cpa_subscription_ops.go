@@ -627,9 +627,26 @@ func selectCpaGrant(block map[string]any, now time.Time) (string, string) {
 	return usable[0].ID, ""
 }
 
+// resetGrantGuard: a valid SOCKS proxy as before, or - for an account with
+// no proxy_url at all (direct account, user decision 2026-11-11) - a direct
+// guard, so the claim still goes through CPA, which connects directly. A
+// proxy_url that is set but invalid stays blocked.
+func (c *cpaClient) resetGrantGuard(ctx context.Context, name string) (*socksGuard, bool, error) {
+	guard, err := c.requireSocksProxy(ctx, name)
+	if err == nil {
+		return guard, false, nil
+	}
+	if guard == nil || guard.proxyURL != "" {
+		return nil, false, err
+	}
+	return directGuard(name), true, nil
+}
+
 type CpaResetResult struct {
 	Result  string `json:"result"`
 	GrantID string `json:"grant_id,omitempty"`
+	// Direct: claimed through CPA without a proxy (account has no proxy_url).
+	Direct bool `json:"direct,omitempty"`
 }
 
 // ClaimCpaResetGrant spends one reset grant for the account. An unknown outcome
@@ -643,7 +660,7 @@ func ClaimCpaResetGrant(ctx context.Context, instanceID int, name string) (*CpaR
 	if authIndex == "" {
 		return nil, errors.New("account has no auth_index")
 	}
-	guard, err := client.requireSocksProxy(ctx, name)
+	guard, direct, err := client.resetGrantGuard(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -681,7 +698,7 @@ func ClaimCpaResetGrant(ctx context.Context, instanceID int, name string) (*CpaR
 	if grantID == "" {
 		selected, reason := selectCpaGrant(block, now)
 		if selected == "" {
-			return &CpaResetResult{Result: "blocked_" + reason}, nil
+			return &CpaResetResult{Result: "blocked_" + reason, Direct: direct}, nil
 		}
 		grantID, requestID = selected, common.GetUUID()
 	}
@@ -715,7 +732,7 @@ func ClaimCpaResetGrant(ctx context.Context, instanceID int, name string) (*CpaR
 	}
 	if settled == "" {
 		cpaPendingClaims.Store(key, pendingClaim{RequestID: requestID, GrantID: grantID, At: now})
-		return &CpaResetResult{Result: "unknown", GrantID: grantID}, nil
+		return &CpaResetResult{Result: "unknown", GrantID: grantID, Direct: direct}, nil
 	}
 	cpaPendingClaims.Delete(key)
 	if settled == "reset" || settled == "already_used" {
@@ -724,5 +741,5 @@ func ClaimCpaResetGrant(ctx context.Context, instanceID int, name string) (*CpaR
 	gopool.Go(func() {
 		_, _ = RefreshCpaAccount(context.Background(), instanceID, name)
 	})
-	return &CpaResetResult{Result: settled, GrantID: grantID}, nil
+	return &CpaResetResult{Result: settled, GrantID: grantID, Direct: direct}, nil
 }

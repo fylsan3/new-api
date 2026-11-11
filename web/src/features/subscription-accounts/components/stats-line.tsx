@@ -111,21 +111,28 @@ function FailReasons(props: {
       >
         {text}
       </TooltipTrigger>
-      <TooltipContent className='max-w-72'>
-        <div className='mb-1 font-medium'>
+      {/* The base popup is inline-flex row; stack the rows vertically. */}
+      <TooltipContent className='w-72 max-w-72 flex-col items-stretch gap-0 py-2'>
+        <div className='mb-1.5 font-medium'>
           {t('Failure reasons, last 7 days ({{count}} total)', {
             count: formatNumber(props.failed, locale),
           })}
         </div>
         {FAIL_CATEGORIES.map((category) => (
-          <div key={category} className='flex justify-between gap-4'>
-            <span>{t(FAIL_CATEGORY_KEYS[category])}</span>
-            <span className='tabular-nums'>
+          <div
+            key={category}
+            className={cn(
+              'flex items-baseline justify-between gap-4 py-0.5',
+              groups[category] === 0 && 'opacity-50'
+            )}
+          >
+            <span className='min-w-0'>{t(FAIL_CATEGORY_KEYS[category])}</span>
+            <span className='flex-none tabular-nums'>
               {formatNumber(groups[category], locale)}
             </span>
           </div>
         ))}
-        <div className='mt-1 opacity-70'>
+        <div className='mt-1.5 border-t border-current/20 pt-1.5 opacity-70'>
           {t(
             'Counted since this feature went live; earlier failures have totals only, no reasons'
           )}

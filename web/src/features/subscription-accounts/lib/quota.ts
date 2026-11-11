@@ -348,6 +348,60 @@ export function buildEffectiveQuota(
 }
 
 /** Next planned daily refresh (seconds), or null when today's are done. */
+// ---- reset grant button (design draft 2026-11-11) ----
+
+export type ResetButtonHint =
+  | { kind: 'ineligible' }
+  | { kind: 'cooldown'; until: string }
+  | { kind: 'paused' }
+  | { kind: 'not_started'; startsAt: string }
+  | { kind: 'expired' }
+  | { kind: 'not_usable' }
+  | { kind: 'not_limited' }
+
+/**
+ * Hint for the reset grant button from the last refreshed reset_grants block
+ * (rules 2-5 of the draft, first match wins). User decision Q1 = b: these
+ * only explain, the button stays clickable and the server decides. A window
+ * the chat headers report as rejected also counts as limited.
+ */
+export function resetButtonHint(
+  block: unknown,
+  windows: QuotaWindow[],
+  nowMs: number
+): ResetButtonHint | null {
+  if (!isRecord(block)) return null
+  if (block.eligible === false) return { kind: 'ineligible' }
+  const cooldown = toStr(block.cooldown_until)
+  if (cooldown && Date.parse(cooldown) > nowMs) {
+    return { kind: 'cooldown', until: cooldown }
+  }
+  const raw = Array.isArray(block.grants) ? block.grants : []
+  const live = raw.filter(
+    (g): g is Rec => isRecord(g) && (toNumber(g.resets_left) ?? 0) > 0
+  )
+  if (live.length === 0) return null
+  const atLimit =
+    toBool(block.at_limit) === true || windows.some((w) => w.limited === true)
+  let first: ResetButtonHint | null = null
+  for (const g of live) {
+    const starts = toStr(g.starts_at)
+    const ends = toStr(g.ends_at)
+    let hint: ResetButtonHint | null = null
+    if (toBool(g.paused) === true) hint = { kind: 'paused' }
+    else if (starts && Date.parse(starts) > nowMs) {
+      hint = { kind: 'not_started', startsAt: starts }
+    } else if (ends && Date.parse(ends) <= nowMs) hint = { kind: 'expired' }
+    else if (toBool(g.usable_now) === false) hint = { kind: 'not_usable' }
+    else if (toBool(g.use_requires_limit) !== false && !atLimit) {
+      hint = { kind: 'not_limited' }
+    }
+    if (!hint) return null // at least one grant can be used now
+    first ??= hint
+  }
+  return first
+}
+
 export function nextAutoRefreshAt(account: CpaAccount): number | null {
   const plan = account.auto_refresh_plan ?? []
   const done = account.auto_refresh_done ?? 0

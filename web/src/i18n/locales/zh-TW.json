@@ -7595,6 +7595,15 @@
     "In progress": "進行中",
     "Not estimated (used < {{n}}%)": "不推算（已用＜{{n}}%）",
     "429 used up, most accurate": "429 用完 最準",
-    "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared": "{{date}} 方案由 {{from}} 變為 {{to}}，以上和以下不做對比"
+    "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared": "{{date}} 方案由 {{from}} 變為 {{to}}，以上和以下不做對比",
+    "This is a direct account (no proxy configured); the grant is claimed through CPA directly.": "該帳號為直連號（未設定代理），本次經 CPA 直連領取。",
+    "Last refresh says so; the server checks again on click": "依據上次重新整理，點擊時伺服器會再判斷一次",
+    "This account cannot use reset grants right now": "該帳號目前不能使用重置卡",
+    "Cooling down, usable again after {{time}}": "冷卻中，{{time}} 後可再次使用",
+    "Reset grant paused by Anthropic": "重置卡已被官方暫停",
+    "Reset grant starts at {{time}}": "重置卡 {{time}} 開始",
+    "Reset grant expired": "重置卡已過期",
+    "Reset grant not usable right now": "重置卡暫不可用",
+    "Quota not used up yet; this grant works only after the limit is hit": "額度還沒用滿，被限流後才能使用重置卡"
   }
 }

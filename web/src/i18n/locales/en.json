@@ -7595,6 +7595,15 @@
     "In progress": "In progress",
     "Not estimated (used < {{n}}%)": "Not estimated (used < {{n}}%)",
     "429 used up, most accurate": "429 used up, most accurate",
-    "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared": "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared"
+    "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared": "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared",
+    "This is a direct account (no proxy configured); the grant is claimed through CPA directly.": "This is a direct account (no proxy configured); the grant is claimed through CPA directly.",
+    "Last refresh says so; the server checks again on click": "Last refresh says so; the server checks again on click",
+    "This account cannot use reset grants right now": "This account cannot use reset grants right now",
+    "Cooling down, usable again after {{time}}": "Cooling down, usable again after {{time}}",
+    "Reset grant paused by Anthropic": "Reset grant paused by Anthropic",
+    "Reset grant starts at {{time}}": "Reset grant starts at {{time}}",
+    "Reset grant expired": "Reset grant expired",
+    "Reset grant not usable right now": "Reset grant not usable right now",
+    "Quota not used up yet; this grant works only after the limit is hit": "Quota not used up yet; this grant works only after the limit is hit"
   }
 }

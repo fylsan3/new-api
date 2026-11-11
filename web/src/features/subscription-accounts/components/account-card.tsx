@@ -31,6 +31,12 @@ import {
   HoverCardTrigger,
 } from '@/components/ui/hover-card'
 import { Switch } from '@/components/ui/switch'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import dayjs from '@/lib/dayjs'
 import { formatTimestampToDate } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { cn } from '@/lib/utils'
@@ -48,6 +54,8 @@ import {
   buildResetGrants,
   quotaLevel,
   remainingPercent,
+  resetButtonHint,
+  type ResetButtonHint,
 } from '../lib/quota'
 import type {
   CpaAccount,
@@ -149,7 +157,7 @@ export function AccountCard(props: AccountCardProps) {
   const ref = { instance_id: account.instance_id, name: account.name }
   const disabled = cred.disabled === true
   const socks = socksStateOf(account)
-  // Token refresh and reset grants still require a working SOCKS proxy.
+  // Token refresh still requires a working SOCKS proxy.
   const proxyReady = socks === 'ok'
   // Quota queries also run without any proxy_url (direct test accounts).
   const live = quotaLive(account)
@@ -166,6 +174,13 @@ export function AccountCard(props: AccountCardProps) {
   const hasResets = resetsLeft > 0
   const activeGrants = (grants?.grants ?? []).filter((g) => g.resetsLeft > 0)
   const resetsTotal = activeGrants.reduce((sum, g) => sum + g.resetsTotal, 0)
+  // Reset grants: SOCKS ok, or a direct account (no proxy_url at all) whose
+  // claim CPA sends directly (design draft 2026-11-11). Rules 2-5 only add
+  // a hint; the server makes the final call (user decision Q1 = b).
+  const resetReady = proxyReady || direct
+  const resetHint = resetReady
+    ? resetButtonHint(account.reset_grants, windows, Date.now())
+    : null
   const nextEnds = activeGrants
     .map((g) => g.endsAt)
     .filter((v): v is string => !!v)
@@ -239,9 +254,20 @@ export function AccountCard(props: AccountCardProps) {
     },
     reset: {
       title: t('Use one reset grant?'),
-      desc: t(
-        'This spends one Claude reset grant of {{name}} ({{left}} left) and clears its rate limit. This cannot be undone.',
-        { name: account.name, left: resetsLeft }
+      desc: (
+        <>
+          {t(
+            'This spends one Claude reset grant of {{name}} ({{left}} left) and clears its rate limit. This cannot be undone.',
+            { name: account.name, left: resetsLeft }
+          )}
+          {direct && (
+            <span className='mt-2 block rounded-md bg-amber-50 px-2 py-1.5 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200'>
+              {t(
+                'This is a direct account (no proxy configured); the grant is claimed through CPA directly.'
+              )}
+            </span>
+          )}
+        </>
       ),
     },
   }
@@ -456,16 +482,11 @@ export function AccountCard(props: AccountCardProps) {
             {t('Models')}
           </Button>
           {account.is_claude && hasResets && (
-            <Button
-              size='xs'
-              variant='outline'
-              className={cn(proxyReady && RED_OUTLINE)}
-              disabled={!proxyReady}
-              title={proxyReady ? undefined : t('Needs a working socks5 proxy')}
+            <ResetGrantButton
+              ready={resetReady}
+              hint={resetHint}
               onClick={() => setPending('reset')}
-            >
-              {t('Use reset grant')}
-            </Button>
+            />
           )}
           <span className='flex-1' />
           <Button
@@ -520,6 +541,71 @@ export function AccountCard(props: AccountCardProps) {
       </HoverCardContent>
     </HoverCard>
   )
+}
+
+/**
+ * Reset grant button. A disabled button gets no pointer events, so the
+ * tooltip sits on a wrapping span: the reason shows even when greyed.
+ */
+function ResetGrantButton(props: {
+  ready: boolean
+  hint: ResetButtonHint | null
+  onClick: () => void
+}) {
+  const { t } = useTranslation()
+  const reason = props.ready
+    ? props.hint && resetHintText(props.hint, t)
+    : t('Needs a working socks5 proxy')
+  const button = (
+    <Button
+      size='xs'
+      variant='outline'
+      className={cn(props.ready && RED_OUTLINE)}
+      disabled={!props.ready}
+      onClick={props.onClick}
+    >
+      {t('Use reset grant')}
+    </Button>
+  )
+  if (!reason) return button
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        delay={150}
+        render={<span className='inline-flex' tabIndex={props.ready ? -1 : 0} />}
+      >
+        {button}
+      </TooltipTrigger>
+      <TooltipContent className='max-w-64'>{reason}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+function shortTime(iso: string): string {
+  return dayjs(iso).format('MM-DD HH:mm')
+}
+
+function resetHintText(
+  hint: ResetButtonHint,
+  t: (key: string, options?: Record<string, unknown>) => string
+): string {
+  const tail = t('Last refresh says so; the server checks again on click')
+  switch (hint.kind) {
+    case 'ineligible':
+      return `${t('This account cannot use reset grants right now')} · ${tail}`
+    case 'cooldown':
+      return `${t('Cooling down, usable again after {{time}}', { time: shortTime(hint.until) })} · ${tail}`
+    case 'paused':
+      return `${t('Reset grant paused by Anthropic')} · ${tail}`
+    case 'not_started':
+      return `${t('Reset grant starts at {{time}}', { time: shortTime(hint.startsAt) })} · ${tail}`
+    case 'expired':
+      return `${t('Reset grant expired')} · ${tail}`
+    case 'not_usable':
+      return `${t('Reset grant not usable right now')} · ${tail}`
+    case 'not_limited':
+      return `${t('Quota not used up yet; this grant works only after the limit is hit')} · ${tail}`
+  }
 }
 
 const NOTICE_TONES = {

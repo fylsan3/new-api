@@ -7595,6 +7595,15 @@
     "In progress": "En cours",
     "Not estimated (used < {{n}}%)": "Non estimé (utilisé < {{n}} %)",
     "429 used up, most accurate": "429 épuisé, le plus précis",
-    "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared": "{{date}} l'offre est passée de {{from}} à {{to}} ; les lignes au-dessus et en dessous ne sont pas comparées"
+    "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared": "{{date}} l'offre est passée de {{from}} à {{to}} ; les lignes au-dessus et en dessous ne sont pas comparées",
+    "This is a direct account (no proxy configured); the grant is claimed through CPA directly.": "Compte direct (aucun proxy configuré) : le bon est réclamé via CPA en direct.",
+    "Last refresh says so; the server checks again on click": "D’après la dernière actualisation ; le serveur revérifie au clic",
+    "This account cannot use reset grants right now": "Ce compte ne peut pas utiliser de bon de réinitialisation pour l’instant",
+    "Cooling down, usable again after {{time}}": "En refroidissement, réutilisable après {{time}}",
+    "Reset grant paused by Anthropic": "Bon de réinitialisation suspendu par Anthropic",
+    "Reset grant starts at {{time}}": "Le bon de réinitialisation commence le {{time}}",
+    "Reset grant expired": "Bon de réinitialisation expiré",
+    "Reset grant not usable right now": "Bon de réinitialisation indisponible pour l’instant",
+    "Quota not used up yet; this grant works only after the limit is hit": "Quota pas encore épuisé ; ce bon ne sert qu’après avoir atteint la limite"
   }
 }

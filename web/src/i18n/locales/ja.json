@@ -7595,6 +7595,15 @@
     "In progress": "進行中",
     "Not estimated (used < {{n}}%)": "推定なし（使用率 < {{n}}%）",
     "429 used up, most accurate": "429 使い切り・最も正確",
-    "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared": "{{date}} プランが {{from}} から {{to}} に変更。上下の行は比較しません"
+    "{{date}} plan changed from {{from}} to {{to}}; rows above and below are not compared": "{{date}} プランが {{from}} から {{to}} に変更。上下の行は比較しません",
+    "This is a direct account (no proxy configured); the grant is claimed through CPA directly.": "このアカウントは直接接続です（プロキシ未設定）。CPA 経由で直接受け取ります。",
+    "Last refresh says so; the server checks again on click": "前回の更新に基づく表示です。クリック時にサーバーが再確認します",
+    "This account cannot use reset grants right now": "このアカウントは現在リセット券を使えません",
+    "Cooling down, usable again after {{time}}": "クールダウン中、{{time}} 以降に再利用可能",
+    "Reset grant paused by Anthropic": "リセット券は公式により一時停止中",
+    "Reset grant starts at {{time}}": "リセット券は {{time}} に開始",
+    "Reset grant expired": "リセット券は期限切れ",
+    "Reset grant not usable right now": "リセット券は現在使用できません",
+    "Quota not used up yet; this grant works only after the limit is hit": "まだ上限に達していません。制限後にのみ使えるリセット券です"
   }
 }
