@@ -42,6 +42,153 @@ export type CpaSettings = {
   refresh_all_cooldown_seconds: number
   last_refresh_all_at: number
   proxy_monthly_cost_usd: number
+  /** Account rotation, one global set (test build 2026-11-11). */
+  rotation_enabled: boolean
+  rotation_work_hours: number
+  rotation_rest_minutes: number
+  rotation_jitter_minutes: number
+  rotation_max_rest_percent: number
+  rotation_min_online: number
+  /** Excluded `${instance_id}/${name}` keys, one per line. */
+  rotation_excluded: string
+  /** Off: every rotation mark on the cards and the summary bar is hidden. */
+  rotation_show_badges: boolean
+  rotation_wake_429_enabled: boolean
+  rotation_wake_429_minutes: number
+  rotation_wake_429_count: number
+  rotation_wake_rpm_enabled: boolean
+  rotation_wake_rpm: number
+  rotation_wake_batch: number
+  rotation_wake_cooldown_minutes: number
+  rotation_wake_hold_minutes: number
+  rotation_wake_rest: boolean
+  rotation_wake_shift: boolean
+  rotation_night_enabled: boolean
+  /** "HH:MM", server local time. */
+  rotation_night_start: string
+  rotation_night_end: string
+  rotation_night_max_rest_percent: number
+  rotation_shift_enabled: boolean
+  rotation_day_shift_start: string
+  rotation_day_shift_end: string
+  rotation_night_shift_start: string
+  rotation_night_shift_end: string
+  rotation_shift_jitter_minutes: number
+  /** `${instance_id}/${name}=day|night|all`, one per line. */
+  rotation_shifts: string
+  rotation_limit_enabled: boolean
+  rotation_limit_minutes: number
+  rotation_limit_count: number
+  rotation_limit_rest_minutes: number
+  rotation_quota_enabled: boolean
+  rotation_quota_percent: number
+  rotation_daily_enabled: boolean
+  rotation_daily_hours: number
+  /** Safety gates: unix seconds of the last switch-on (work counts from it). */
+  rotation_enabled_at: number
+  /** At most this many accounts per CPA go resting in one step. */
+  rotation_batch_size: number
+  rotation_batch_gap_minutes: number
+  rotation_capacity_enabled: boolean
+  /** Per-account limits the accounts left online must stay under; 0 = off. */
+  rotation_capacity_rpm: number
+  rotation_capacity_tpm: number
+  rotation_capacity_429_minutes: number
+  /** Plan and show who would rest, never disable anyone. */
+  rotation_dry_run: boolean
+  /** Monitoring and alerts. */
+  auth_stop_enabled: boolean
+  alert_wecom_enabled: boolean
+  alert_dingtalk_enabled: boolean
+  alert_on_socks: boolean
+  alert_on_auth: boolean
+  alert_on_cpa: boolean
+  alert_on_rotation: boolean
+  has_wecom_webhook: boolean
+  has_dingtalk_webhook: boolean
+  has_dingtalk_secret: boolean
+}
+
+/** Write-only secrets: "" keeps the saved value, "-" clears it. */
+export type CpaSettingsInput = Partial<CpaSettings> & {
+  alert_wecom_webhook?: string
+  alert_dingtalk_webhook?: string
+  alert_dingtalk_secret?: string
+}
+
+export type RestReason = 'rotation' | 'shift' | 'limit' | 'quota' | 'daily'
+
+export type ShiftKind = 'day' | 'night' | 'all'
+
+export type RotationStateKind =
+  | 'online'
+  | 'resting'
+  | 'queued'
+  | 'off'
+  | 'excluded'
+
+export type CpaRotationState = {
+  instance_id: number
+  name: string
+  state: RotationStateKind
+  worked_hours: number
+  rest_until?: number
+  queue_pos?: number
+  rest_worked_hours?: number
+  rate_limited?: boolean
+  /** Why it rests or is queued. */
+  reason?: RestReason
+  /** Only while shifts are on. */
+  shift?: ShiftKind
+  shift_on_at?: number
+  shift_off_at?: number
+  /** Woken early: stays online until then. */
+  hold_until?: number
+  today_hours: number
+  /** Stopped after 401 / 403. */
+  auth_disabled?: boolean
+  participates: boolean
+  /** Why a queued account is not resting yet. */
+  blocked?: RotationBlock
+  /** Dry run: the account would be resting right now. */
+  would_rest?: boolean
+}
+
+export type RotationBlock =
+  | 'min_online'
+  | 'percent'
+  | 'batch'
+  | 'capacity'
+  | 'busy'
+
+/** Load of one CPA the safety gates look at. */
+export type CpaRotationPool = {
+  instance_id: number
+  online_before: number
+  online: number
+  resting: number
+  /** Busiest minute of the last hour, 429s left out. */
+  peak_rpm: number
+  peak_tpm: number
+  recent_429: number
+}
+
+export type CpaRotationSummary = {
+  enabled: boolean
+  online: number
+  resting: number
+  queued: number
+  off: number
+  next_online?: number
+  /** Night window (more may rest) is active now. */
+  night?: boolean
+  last_wake_at?: number
+  accounts: CpaRotationState[]
+  dry_run?: boolean
+  would_rest?: number
+  /** Accounts meeting each rule right now, switched on or not. */
+  hits?: Partial<Record<RestReason, number>>
+  pools?: CpaRotationPool[]
 }
 
 /** Credential fields mirrored from CPA `GET /credentials` (subset). */
@@ -96,12 +243,58 @@ export type CpaAccount = {
   auto_refresh_done?: number
   auto_refresh_last_at?: number
   auto_refresh_error?: string
+  rest_started_at?: number
+  rest_until?: number
+  rest_worked_hours?: number
+  rest_reason?: RestReason
+  rotation_hold_until?: number
+  /** Disabled automatically after upstream 401 / 403. */
+  auth_disabled_at?: number
   updated_at: number
+}
+
+/** Request / token rate of one account; keyed like usage. */
+export type CpaRate = {
+  rpm_1m: number
+  tpm_1m: number
+  rpm_5m: number
+  tpm_5m: number
+  /** Busiest minute of the last hour, 429s left out. */
+  rpm_peak_1h: number
+  /** Tokens (input + output, no cache) of the busiest minute. */
+  tpm_peak_1h?: number
+  r429_1h: number
+}
+
+export type RateRange = '1h' | '12h' | '24h' | '7d'
+
+export type CpaRatePoint = {
+  ts: number
+  /** Per minute (averaged inside wider buckets). */
+  requests: number
+  tokens: number
+  failed: number
+  r429: number
+  /** Busiest single minute of the bucket; requests leave out 429s. */
+  peak_requests: number
+  peak_tokens: number
+  /** Failed requests other than 429 inside that busiest minute. */
+  peak_failed?: number
+}
+
+export type CpaRateSeries = {
+  range: RateRange
+  step: number
+  points: CpaRatePoint[]
 }
 
 export type CpaFailReason = { status_code: number; count: number }
 
-export type CpaLastFailInfo = { at: number; status_code: number; code?: string }
+export type CpaLastFailInfo = {
+  at: number
+  status_code: number
+  code?: string
+}
 
 /** Last-30-day usage collected from the CPA usage queue. */
 export type CpaCardUsage = {
@@ -136,6 +329,11 @@ export type SubscriptionOverview = {
   /** Keyed by `${instance_id}/${auth_index}`. */
   usage: Record<string, CpaCardUsage>
   alerts: CpaAlert[]
+  rotation?: CpaRotationSummary
+  /** Keyed by `${instance_id}/${auth_index}`. */
+  rates?: Record<string, CpaRate>
+  /** All accounts together; the peak is the pool's own busiest minute. */
+  rate_total?: CpaRate
 }
 
 export type CpaAccountStats = {

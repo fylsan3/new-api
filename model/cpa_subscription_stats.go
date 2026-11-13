@@ -85,6 +85,24 @@ func AddCpaUsageHourly(row *CpaUsageHourly) error {
 	}).Create(row).Error
 }
 
+// CpaActiveHour is one hour in which an account served at least one request.
+type CpaActiveHour struct {
+	InstanceID int
+	AuthIndex  string
+	BucketTs   int64
+}
+
+// ListCpaActiveHours returns the hours since `from` with requests, per account.
+func ListCpaActiveHours(from int64) ([]CpaActiveHour, error) {
+	var rows []CpaActiveHour
+	err := DB.Model(&CpaUsageHourly{}).
+		Select("instance_id, auth_index, bucket_ts").
+		Where("bucket_ts >= ? AND requests > 0", from).
+		Group("instance_id, auth_index, bucket_ts").
+		Scan(&rows).Error
+	return rows, err
+}
+
 // ListCpaUsageHourly returns buckets in [from, to).
 func ListCpaUsageHourly(from, to int64) ([]CpaUsageHourly, error) {
 	var rows []CpaUsageHourly

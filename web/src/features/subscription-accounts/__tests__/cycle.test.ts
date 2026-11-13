@@ -18,14 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, it } from 'vitest'
 
+import { failCategoryOf, groupFailReasons, sevenDayCounts } from '../lib/card'
 import {
-  failCategoryOf,
-  groupFailReasons,
-  sevenDayCounts,
-} from '../lib/card'
-import { cycleBasisKey, cycleBreakAfter, cycleUsedText } from '../lib/cycle'
+  cycleBasisKey,
+  cycleBreakAfter,
+  cycleOverview,
+  cycleUsedText,
+} from '../lib/cycle'
 import { buildResetGrants } from '../lib/quota'
-import type { CpaCycleRow } from '../types'
+import type { CpaCycleAccount, CpaCycleRow } from '../types'
 
 function cycle(over: Partial<CpaCycleRow>): CpaCycleRow {
   return {
@@ -130,5 +131,56 @@ describe('cycle comparison helpers', () => {
     expect(cycleBreakAfter(rows, 1)).toBe(true)
     expect(cycleBreakAfter(rows, 2)).toBe(false)
     expect(cycleBreakAfter(rows, 3)).toBe(false)
+  })
+})
+
+describe('cycle overview (one row per account)', () => {
+  const account = (name: string, cycles: CpaCycleRow[]): CpaCycleAccount => ({
+    instance_id: 1,
+    name,
+    windows: [{ window: 'seven_day', cycles }],
+  })
+
+  it('puts the biggest drop first and accounts without comparison last', () => {
+    const rows = cycleOverview(
+      [
+        account('steady', [cycle({ estimated_full: 100, change_percent: 2 })]),
+        account('new', [cycle({ open: true })]),
+        account('dropped', [
+          cycle({ estimated_full: 80, change_percent: -20 }),
+        ]),
+        account('other-window', []),
+      ],
+      'seven_day'
+    )
+    expect(rows.map((r) => r.account.name)).toEqual([
+      'dropped',
+      'steady',
+      'new',
+    ])
+    expect(rows.map((r) => r.dropped)).toEqual([true, false, false])
+    expect(rows[2].change).toBeNull()
+  })
+
+  it('uses the newest period that has an estimate', () => {
+    const [row] = cycleOverview(
+      [
+        account('a', [
+          cycle({ id: 3, open: true, used_percent: 4 }),
+          cycle({ id: 2, estimated_full: 90, change_percent: -10 }),
+          cycle({ id: 1, estimated_full: 100 }),
+        ]),
+      ],
+      'seven_day'
+    )
+    expect(row.latest?.id).toBe(2)
+    expect(row.change).toBe(-10)
+    expect(row.dropped).toBe(true)
+  })
+
+  it('skips accounts that have no period in the window', () => {
+    expect(
+      cycleOverview([account('a', [cycle({})])], 'seven_day_opus')
+    ).toEqual([])
   })
 })

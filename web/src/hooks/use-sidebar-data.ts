@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import {
   Activity,
   BadgeCheck,
+  BellRing,
   Box,
   ClipboardList,
   CreditCard,
@@ -137,6 +138,12 @@ export function useSidebarData(): SidebarData {
             title: t('Subscription Accounts'),
             url: '/subscription-accounts',
             icon: BadgeCheck,
+            requiredRole: ROLE.SUPER_ADMIN,
+          },
+          {
+            title: t('Monitoring & alerts'),
+            url: '/subscription-accounts/monitor',
+            icon: BellRing,
             requiredRole: ROLE.SUPER_ADMIN,
           },
           {

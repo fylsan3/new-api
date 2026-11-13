@@ -47,6 +47,7 @@ import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authent
 import { Route as AuthenticatedRedemptionCodesIndexRouteImport } from './routes/_authenticated/redemption-codes/index'
 import { Route as AuthenticatedSecurityIndexRouteImport } from './routes/_authenticated/security/index'
 import { Route as AuthenticatedSubscriptionAccountsIndexRouteImport } from './routes/_authenticated/subscription-accounts/index'
+import { Route as AuthenticatedSubscriptionAccountsMonitorRouteImport } from './routes/_authenticated/subscription-accounts/monitor'
 import { Route as AuthenticatedSubscriptionsIndexRouteImport } from './routes/_authenticated/subscriptions/index'
 import { Route as AuthenticatedSystemInfoIndexRouteImport } from './routes/_authenticated/system-info/index'
 import { Route as AuthenticatedSystemSettingsIndexRouteImport } from './routes/_authenticated/system-settings/index'
@@ -274,6 +275,12 @@ const AuthenticatedSubscriptionAccountsIndexRoute =
     path: '/subscription-accounts/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSubscriptionAccountsMonitorRoute =
+  AuthenticatedSubscriptionAccountsMonitorRouteImport.update({
+    id: '/subscription-accounts/monitor',
+    path: '/subscription-accounts/monitor',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSubscriptionsIndexRoute =
   AuthenticatedSubscriptionsIndexRouteImport.update({
     id: '/subscriptions/',
@@ -457,6 +464,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
+  '/subscription-accounts/monitor': typeof AuthenticatedSubscriptionAccountsMonitorRoute
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/usage-logs/audit': typeof AuthenticatedUsageLogsAuditRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
@@ -520,6 +528,7 @@ export interface FileRoutesByTo {
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
+  '/subscription-accounts/monitor': typeof AuthenticatedSubscriptionAccountsMonitorRoute
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/usage-logs/audit': typeof AuthenticatedUsageLogsAuditRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
@@ -587,6 +596,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/models/$section': typeof AuthenticatedModelsSectionRoute
+  '/_authenticated/subscription-accounts/monitor': typeof AuthenticatedSubscriptionAccountsMonitorRoute
   '/_authenticated/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/_authenticated/usage-logs/audit': typeof AuthenticatedUsageLogsAuditRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
@@ -653,6 +663,7 @@ export interface FileRouteTypes {
     | '/dashboard/$section'
     | '/errors/$error'
     | '/models/$section'
+    | '/subscription-accounts/monitor'
     | '/usage-logs/$section'
     | '/usage-logs/audit'
     | '/channels/'
@@ -716,6 +727,7 @@ export interface FileRouteTypes {
     | '/dashboard/$section'
     | '/errors/$error'
     | '/models/$section'
+    | '/subscription-accounts/monitor'
     | '/usage-logs/$section'
     | '/usage-logs/audit'
     | '/channels'
@@ -782,6 +794,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard/$section'
     | '/_authenticated/errors/$error'
     | '/_authenticated/models/$section'
+    | '/_authenticated/subscription-accounts/monitor'
     | '/_authenticated/usage-logs/$section'
     | '/_authenticated/usage-logs/audit'
     | '/_authenticated/channels/'
@@ -1106,6 +1119,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSubscriptionAccountsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/subscription-accounts/monitor': {
+      id: '/_authenticated/subscription-accounts/monitor'
+      path: '/subscription-accounts/monitor'
+      fullPath: '/subscription-accounts/monitor'
+      preLoaderRoute: typeof AuthenticatedSubscriptionAccountsMonitorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/subscriptions/': {
       id: '/_authenticated/subscriptions/'
       path: '/subscriptions'
@@ -1387,6 +1407,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedModelsSectionRoute: typeof AuthenticatedModelsSectionRoute
+  AuthenticatedSubscriptionAccountsMonitorRoute: typeof AuthenticatedSubscriptionAccountsMonitorRoute
   AuthenticatedUsageLogsSectionRoute: typeof AuthenticatedUsageLogsSectionRoute
   AuthenticatedUsageLogsAuditRoute: typeof AuthenticatedUsageLogsAuditRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
@@ -1414,6 +1435,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedModelsSectionRoute: AuthenticatedModelsSectionRoute,
+  AuthenticatedSubscriptionAccountsMonitorRoute:
+    AuthenticatedSubscriptionAccountsMonitorRoute,
   AuthenticatedUsageLogsSectionRoute: AuthenticatedUsageLogsSectionRoute,
   AuthenticatedUsageLogsAuditRoute: AuthenticatedUsageLogsAuditRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,

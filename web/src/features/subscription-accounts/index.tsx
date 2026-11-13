@@ -23,6 +23,7 @@ import {
   Plus,
   RefreshCcw,
   ServerCog,
+  Settings2,
   Trash2,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -36,6 +37,11 @@ import { SectionPageLayout } from '@/components/layout'
 import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from '@/components/ui/hover-card'
 import { formatTimestampToDate } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { getServerErrorMessage } from '@/lib/server-error-message'
@@ -52,8 +58,11 @@ import { AccountCard } from './components/account-card'
 import { CpaAlertBanner } from './components/alert-banner'
 import { InstanceDialog } from './components/instance-dialog'
 import { RefreshControls } from './components/refresh-controls'
+import { RotationBar } from './components/rotation-bar'
+import { RotationSettingsDialog } from './components/rotation-settings-dialog'
 import { alertsOf, cardUsageOf } from './lib/card'
 import { sortAccounts } from './lib/quota'
+import { rateOf, rotationOf } from './lib/rotation'
 import type { CpaAccountStats, CpaInstance } from './types'
 
 /** Window of the per-account token breakdown shown in card details. */
@@ -64,6 +73,7 @@ export function SubscriptionAccounts() {
   const queryClient = useQueryClient()
   const [dialog, setDialog] = useState<{ instance?: CpaInstance } | null>(null)
   const [deleting, setDeleting] = useState<CpaInstance | null>(null)
+  const [rotationOpen, setRotationOpen] = useState(false)
 
   const query = useQuery({
     queryKey: OVERVIEW_QUERY_KEY,
@@ -163,7 +173,9 @@ export function SubscriptionAccounts() {
     )
   } else {
     content = (
-      <div className='flex flex-wrap items-start gap-4'>
+      // Grid rows of 1fr: every card is as tall as the tallest one, and that
+      // height still follows its content (user request 2026-11-12).
+      <div className='grid auto-rows-fr grid-cols-[repeat(auto-fill,300px)] gap-4'>
         {accounts.map((account) => (
           <AccountCard
             key={`${account.instance_id}/${account.name}`}
@@ -176,6 +188,10 @@ export function SubscriptionAccounts() {
             }
             collecting={collecting.has(account.instance_id)}
             alerts={alertsOf(data.alerts, account)}
+            rotation={rotationOf(data.rotation, account)}
+            rotationEnabled={data.settings.rotation_enabled}
+            rotationBadges={data.settings.rotation_show_badges}
+            rate={rateOf(data.rates, account)}
           />
         ))}
       </div>
@@ -214,12 +230,25 @@ export function SubscriptionAccounts() {
               </Button>
             </div>
             {data && (
-              <RefreshControls
-                key={data.settings.refresh_all_cooldown_seconds}
-                settings={data.settings}
-                running={data.refresh_all_running}
-                serverNow={data.now}
-              />
+              <div className='flex flex-wrap items-center gap-3'>
+                {data.instances.length > 0 &&
+                  !data.settings.rotation_show_badges && (
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      onClick={() => setRotationOpen(true)}
+                    >
+                      <Settings2 />
+                      {t('Rotation settings')}
+                    </Button>
+                  )}
+                <RefreshControls
+                  key={data.settings.refresh_all_cooldown_seconds}
+                  settings={data.settings}
+                  running={data.refresh_all_running}
+                  serverNow={data.now}
+                />
+              </div>
             )}
           </div>
 
@@ -230,73 +259,37 @@ export function SubscriptionAccounts() {
           {data?.instances.length ? (
             <div className='flex flex-wrap gap-2'>
               {data.instances.map((instance) => (
-                <div
+                <InstancePill
                   key={instance.id}
-                  className='flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm'
-                >
-                  <span
-                    className={
-                      instance.last_test_ok
-                        ? 'size-2 rounded-full bg-emerald-500'
-                        : 'bg-muted-foreground/40 size-2 rounded-full'
-                    }
-                  />
-                  <span className='font-medium'>{instance.name}</span>
-                  <span className='text-muted-foreground text-xs'>
-                    {instance.base_url}
-                  </span>
-                  <span className='text-muted-foreground text-xs'>
-                    {t('Key')}: {instance.has_secret ? '****' : '-'}
-                  </span>
-                  <span
-                    className={
-                      instance.usage_collect_enabled &&
-                      (instance.usage_last_error ||
-                        instance.usage_remote_state === 2)
-                        ? 'text-xs text-red-600 dark:text-red-400'
-                        : 'text-muted-foreground text-xs'
-                    }
-                    title={
-                      instance.usage_last_error ||
-                      (instance.usage_last_poll_at
-                        ? `${t('Last poll')} ${formatTimestampToDate(instance.usage_last_poll_at)}`
-                        : undefined)
-                    }
-                  >
-                    {usageStateLabel(instance, t)}
-                  </span>
-                  {instance.last_test_at > 0 && (
-                    <span
-                      className='text-muted-foreground text-xs'
-                      title={instance.last_test_msg}
-                    >
-                      {t('Tested')}{' '}
-                      {formatTimestampToDate(instance.last_test_at)}
-                    </span>
-                  )}
-                  <Button
-                    size='icon-xs'
-                    variant='ghost'
-                    aria-label={t('Edit')}
-                    onClick={() => setDialog({ instance })}
-                  >
-                    <Pencil />
-                  </Button>
-                  <Button
-                    size='icon-xs'
-                    variant='ghost'
-                    aria-label={t('Delete')}
-                    onClick={() => setDeleting(instance)}
-                  >
-                    <Trash2 />
-                  </Button>
-                </div>
+                  instance={instance}
+                  onEdit={() => setDialog({ instance })}
+                  onDelete={() => setDeleting(instance)}
+                />
               ))}
             </div>
           ) : null}
 
+          {data?.instances.length && data.settings.rotation_show_badges ? (
+            <RotationBar
+              summary={data.rotation}
+              enabled={data.settings.rotation_enabled}
+              onSettings={() => setRotationOpen(true)}
+            />
+          ) : null}
+
           {content}
         </div>
+
+        {rotationOpen && data && (
+          <RotationSettingsDialog
+            open
+            onOpenChange={setRotationOpen}
+            settings={data.settings}
+            accounts={accounts.filter((account) => account.is_claude)}
+            instanceNames={instanceNames}
+            rotation={data.rotation}
+          />
+        )}
 
         {dialog && (
           <InstanceDialog
@@ -326,6 +319,101 @@ export function SubscriptionAccounts() {
         )}
       </SectionPageLayout.Content>
     </SectionPageLayout>
+  )
+}
+
+/** CPA chip: only the name; hovering shows address, key and collection. */
+function InstancePill(props: {
+  instance: CpaInstance
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const { t } = useTranslation()
+  const instance = props.instance
+  const collectBad =
+    instance.usage_collect_enabled &&
+    (!!instance.usage_last_error || instance.usage_remote_state === 2)
+  return (
+    <HoverCard>
+      <HoverCardTrigger
+        delay={200}
+        closeDelay={150}
+        render={
+          <button
+            type='button'
+            className='hover:bg-muted/60 flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm'
+          />
+        }
+      >
+        <span
+          className={
+            instance.last_test_ok
+              ? 'size-2 rounded-full bg-emerald-500'
+              : 'bg-muted-foreground/40 size-2 rounded-full'
+          }
+        />
+        <span className='font-medium'>{instance.name}</span>
+        {collectBad && <span className='size-1.5 rounded-full bg-red-500' />}
+      </HoverCardTrigger>
+      <HoverCardContent align='start' className='w-80 space-y-1.5 text-xs'>
+        <div className='text-sm font-medium'>{instance.name}</div>
+        <InfoRow label={t('Address')} value={instance.base_url} />
+        <InfoRow label={t('Key')} value={instance.has_secret ? '****' : '-'} />
+        <InfoRow
+          label={t('Usage collection')}
+          value={usageStateLabel(instance, t)}
+          danger={collectBad}
+        />
+        {instance.usage_last_error && (
+          <div className='break-all text-red-600 dark:text-red-400'>
+            {instance.usage_last_error}
+          </div>
+        )}
+        {instance.usage_last_poll_at > 0 && (
+          <InfoRow
+            label={t('Last poll')}
+            value={formatTimestampToDate(instance.usage_last_poll_at)}
+          />
+        )}
+        {instance.last_test_at > 0 && (
+          <InfoRow
+            label={t('Tested')}
+            value={`${formatTimestampToDate(instance.last_test_at)}${
+              instance.last_test_msg ? ` · ${instance.last_test_msg}` : ''
+            }`}
+          />
+        )}
+        <div className='flex justify-end gap-1.5 border-t pt-2'>
+          <Button size='xs' variant='outline' onClick={props.onEdit}>
+            <Pencil />
+            {t('Edit')}
+          </Button>
+          <Button size='xs' variant='outline' onClick={props.onDelete}>
+            <Trash2 />
+            {t('Delete')}
+          </Button>
+        </div>
+      </HoverCardContent>
+    </HoverCard>
+  )
+}
+
+function InfoRow(props: { label: string; value: string; danger?: boolean }) {
+  return (
+    <div className='flex gap-2'>
+      <span className='text-muted-foreground w-16 flex-none'>
+        {props.label}
+      </span>
+      <span
+        className={
+          props.danger
+            ? 'min-w-0 break-all text-red-600 dark:text-red-400'
+            : 'min-w-0 break-all'
+        }
+      >
+        {props.value}
+      </span>
+    </div>
   )
 }
 

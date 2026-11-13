@@ -24,10 +24,15 @@ import type {
   CpaAlert,
   CpaInstance,
   CpaModel,
+  CpaRateSeries,
+  CpaRotationSummary,
   CpaSettings,
+  CpaSettingsInput,
   CpaCycleReport,
   CpaStatsReport,
+  RateRange,
   ResetClaimResult,
+  ShiftKind,
   SubscriptionOverview,
 } from './types'
 
@@ -95,7 +100,7 @@ export function refreshAll() {
   )
 }
 
-export function updateSettings(input: Partial<CpaSettings>) {
+export function updateSettings(input: CpaSettingsInput) {
   return unwrap(api.put<Envelope<CpaSettings>>(`${BASE}/settings`, input))
 }
 
@@ -161,3 +166,44 @@ export function acknowledgeAlerts(ids?: number[]) {
 }
 
 export const ALERTS_QUERY_KEY = ['subscription-accounts', 'alerts']
+
+/** Sends a test message to one saved channel. */
+export function testAlertChannel(channel: 'wecom' | 'dingtalk') {
+  return unwrap(api.post<Envelope<null>>(`${BASE}/alerts/test`, { channel }))
+}
+
+export const RATE_SERIES_QUERY_KEY = ['subscription-accounts', 'rate-series']
+
+/** RPM / TPM chart of one account, or the whole pool without ref. */
+export function getRateSeries(range: RateRange, ref?: AccountRef) {
+  return unwrap(
+    api.get<Envelope<CpaRateSeries>>(`${BASE}/rate-series`, {
+      params: { range, ...ref },
+    })
+  )
+}
+
+/**
+ * Plans with the given (unsaved) settings and changes nothing: who would go
+ * resting in the first step, who would queue and why.
+ */
+export function previewRotation(input: CpaSettingsInput) {
+  return unwrap(
+    api.post<Envelope<CpaRotationSummary>>(`${BASE}/rotation/preview`, input)
+  )
+}
+
+/** Emergency: switch rotation off and bring every resting account back. */
+export function stopRotation() {
+  return unwrap(
+    api.post<Envelope<{ woken: number; failed: number }>>(
+      `${BASE}/rotation/stop`
+    )
+  )
+}
+
+export function setAccountShift(ref: AccountRef, shift: ShiftKind) {
+  return unwrap(
+    api.post<Envelope<null>>(`${BASE}/account/shift`, { ...ref, shift })
+  )
+}

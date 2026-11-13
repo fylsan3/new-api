@@ -37,6 +37,23 @@ interface CompactDateTimeRangePickerProps {
   className?: string
 }
 
+type PresetKind =
+  | 'today'
+  | 'yesterday'
+  | '7d'
+  | 'week'
+  | 'lastWeek'
+  | '30d'
+  | 'month'
+  | 'lastMonth'
+
+// Completed periods: a whole yesterday / last week / last month.
+const PAST_PRESETS: { kind: PresetKind; label: string }[] = [
+  { kind: 'yesterday', label: 'Yesterday' },
+  { kind: 'lastWeek', label: 'Last week' },
+  { kind: 'lastMonth', label: 'Last month' },
+]
+
 function toInputValue(date?: Date): string {
   return date ? dayjs(date).format('YYYY-MM-DDTHH:mm:ss') : ''
 }
@@ -89,12 +106,27 @@ export function CompactDateTimeRangePicker({
     setOpen(false)
   }
 
-  const applyPreset = (kind: 'today' | '7d' | 'week' | '30d' | 'month') => {
+  const applyPreset = (kind: PresetKind) => {
     const now = dayjs()
-    const presets = {
+    const lastWeek = now.subtract(1, 'week')
+    const lastMonth = now.subtract(1, 'month')
+    const yesterday = now.subtract(1, 'day')
+    const presets: Record<PresetKind, { start: Date; end: Date }> = {
       today: {
         start: now.startOf('day').toDate(),
         end: now.endOf('day').toDate(),
+      },
+      yesterday: {
+        start: yesterday.startOf('day').toDate(),
+        end: yesterday.endOf('day').toDate(),
+      },
+      lastWeek: {
+        start: lastWeek.startOf('week').toDate(),
+        end: lastWeek.endOf('week').toDate(),
+      },
+      lastMonth: {
+        start: lastMonth.startOf('month').toDate(),
+        end: lastMonth.endOf('month').toDate(),
       },
       '7d': {
         start: now.subtract(6, 'day').startOf('day').toDate(),
@@ -225,6 +257,21 @@ export function CompactDateTimeRangePicker({
             >
               {t('Current month')}
             </Button>
+          </div>
+
+          <div className='flex flex-wrap gap-1.5'>
+            {PAST_PRESETS.map((preset) => (
+              <Button
+                key={preset.kind}
+                type='button'
+                variant='secondary'
+                size='sm'
+                className='h-7 flex-1 px-2 text-xs'
+                onClick={() => applyPreset(preset.kind)}
+              >
+                {t(preset.label)}
+              </Button>
+            ))}
           </div>
 
           <div className='flex justify-end'>

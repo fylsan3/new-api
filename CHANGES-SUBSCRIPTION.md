@@ -126,6 +126,59 @@
 
 测试：`TestResetGrantGuard`、`__tests__/reset-button.test.ts`。
 
+### 5.6 账号轮休 / 安全闸 / 监控告警 / RPM·TPM（2026-11-12）
+
+**升级后的默认状态：轮休总开关关闭、演练模式关闭、401/403 自动停用关闭、企微 / 钉钉推送关闭。不打开就不会有任何账号被自动下线。**
+
+#### 轮休（`service/cpa_subscription_rotation.go`）
+
+- 做法：到点的账号在 CPA 上**停用**（与手动开关同一个接口，不发往 Anthropic），休息够了再启用。只会叫回带轮休标记的账号；被 SOCKS 守卫、401/403 或手动停用的账号**永远不碰**。
+- 每 30 秒左右算一次。决策函数 `planCpaRotation` 是纯函数（不碰 CPA、不碰数据库），便于测试。
+- 下线原因及优先级：排班 > 单号保护（短时 429 过多 / 额度快用完 / 当天工作时长到上限）> 普通轮休（连续工作 N 小时）。
+- 上限：每台 CPA 同时休息不超过「最多休息比例」（夜间时段可用单独比例），且始终保留「最少在线数」；超出的排队，页面显示排队原因。
+- 繁忙叫回：号池近期 429 过多或人均 RPM 过高时提前叫回休息中的账号；额度快用完而休息的账号优先叫回；额度已打满的不提前叫回。
+- 设置弹窗 7 个页签：基本 / 安全闸 / 繁忙叫回 / 夜间 / 排班 / 单号保护 / 账号；每条规则旁显示「当前命中 N 个号」。
+
+#### 安全闸（打开轮休不会一下子下线很多号）
+
+| # | 规则 | 默认 |
+|---|---|---|
+| 1 | 只统计打开开关**之后**的工作时长（`rotation_enabled_at`），之前的不算 | — |
+| 2 | 分批下线：每台 CPA 每步最多下线几个 | 1 个 |
+| 3 | 两步之间至少间隔 | 5 分钟 |
+| 4 | 下线前先看负载：剩下的在线号按近 1 小时最忙一分钟算，人均 RPM 不超过上限才下线 | 开，上限 8 |
+| 5 | 同上，人均 TPM 上限 | 0 = 不查 |
+| 6 | 号池最近几分钟内出现过 429 就暂缓 | 5 分钟 |
+| 7 | 演练模式：只计算、只在页面标「本应休息」并写系统日志，**不停用任何账号** | 关 |
+
+- 打开总开关必须走「预览 → 确认」：`POST /rotation/preview` 用未保存的设置试算，返回第一步会下线谁、谁排队及原因、每台 CPA 下线前后的负载，不改任何设置。
+- 应急按钮「全部叫回并暂停」：`POST /rotation/stop`，关闭轮休并立即启用所有因轮休休息的账号，写审计 `cpa_subscription.rotation_stop`。
+- 排队原因代码：`min_online`、`percent`、`busy`、`batch`、`capacity`。
+
+#### 每分钟用量与 RPM / TPM（`service/cpa_subscription_minute.go`，新表 `cpa_usage_minute`）
+
+- 从已有的用量采集里顺带按分钟汇总，保留 7 天；**不新增任何请求**。
+- **TPM = 输入 + 输出，不含缓存读写**，与 New API 使用日志口径一致。小时级统计（账号对比表、30 天 token）仍含缓存，页面已注明。
+- 卡片显示最近一分钟和 5 分钟平均；监控表有「近 1 小时峰值 TPM」列和合计行。
+- 图表 `GET /rate-series?range=1h|12h|24h|7d`：1 小时为面积图；更宽的范围柱 = 该时段最忙一分钟、线 = 平均；成功 / 失败分色，429 单独计。
+
+#### 监控告警（菜单「监控告警」，在「订阅账号」下方、「渠道」上方，仅超管）
+
+- **401 / 403 自动停用**（开关 `auth_stop_enabled`，**默认关**）：转发请求返回 401 / 403 的账号在 CPA 上停用并产生告警，不会自动恢复。
+- **企微 / 钉钉群机器人推送**（`service/cpa_subscription_notify.go`）：四类事件各有开关（SOCKS、401/403、CPA 连不上、轮休）；webhook 和钉钉签名密钥加密保存，不回传浏览器；`POST /alerts/test` 发测试消息。两个通道默认关。
+
+#### 其他
+
+- 周期对比改为全账号总览表（原来一次只能看一个号）。
+- 使用日志的时间筛选加「昨天 / 上周 / 上月」（`web/src/features/usage-logs/components/compact-date-time-range-picker.tsx`）。
+- 审计新增：`rotation_rest`、`rotation_wake`、`rotation_stop`、`account_shift`、`alert_test`。
+
+新接口：`POST /alerts/test`、`GET /rate-series`、`POST /account/shift`、`POST /rotation/preview`、`POST /rotation/stop`。
+新文件：`model/cpa_subscription_minute.go`、`service/cpa_subscription_minute.go`(+`_test`)、`service/cpa_subscription_notify.go`、`service/cpa_subscription_rotation.go`(+`_test`)；前端 `monitor.tsx`、`components/{monitor-panel,rate-chart,rotation-bar,rotation-preview,rotation-settings-dialog,emergency-stop}.tsx`、`lib/{rate,rotation}.ts`、`__tests__/{rate,rotation}.test.ts`、路由 `routes/_authenticated/subscription-accounts/monitor.tsx`。
+`model/main.go` 的 AutoMigrate 增加 1 张表 `cpa_usage_minute`；`cpa_subscription_settings` 增加若干列（启动自动加，无需手工迁移）。
+
+测试：`go test ./service/`、vitest 67 条通过。本机测试环境实测预览、应急按钮、演练模式。**未在真实号池上跑过轮休，生产首次开启建议先用演练模式观察一两天。**
+
 ### 6. 审计日志
 
 8 类操作写入 New API 审计日志：CPA 添加/修改/删除、账号启用、账号关闭、刷新 token、重置额度、刷新设置修改。

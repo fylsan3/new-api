@@ -313,6 +313,39 @@ it.each([
   }
 )
 
+it.each([
+  {
+    label: 'Yesterday',
+    start: new Date(2026, 8, 15),
+    end: new Date(2026, 8, 15, 23, 59, 59, 999),
+  },
+  {
+    label: 'Last week',
+    start: new Date(2026, 8, 6),
+    end: new Date(2026, 8, 12, 23, 59, 59, 999),
+  },
+  {
+    label: 'Last month',
+    start: new Date(2026, 7, 1),
+    end: new Date(2026, 7, 31, 23, 59, 59, 999),
+  },
+])('selects the whole past period for the $label preset', async (c) => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(2026, 8, 16, 12)) // Wednesday
+  const user = userEvent.setup()
+  const onChange = vi.fn()
+  render(
+    <CompactDateTimeRangePicker
+      start={new Date(2026, 8, 1)}
+      end={new Date(2026, 8, 2)}
+      onChange={onChange}
+    />
+  )
+  await user.click(screen.getByRole('button', { name: /^2026/ }))
+  await user.click(screen.getByRole('button', { name: c.label }))
+  expect(onChange).toHaveBeenCalledWith({ start: c.start, end: c.end })
+})
+
 it('keeps the seconds of the current range when it is confirmed again', async () => {
   const user = userEvent.setup()
   const onChange = vi.fn()

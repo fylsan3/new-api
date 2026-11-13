@@ -427,6 +427,7 @@ func StartCpaSubscriptionScheduler() {
 		startCpaUsageCollector()
 		startCpaCredentialSync()
 		startCpaDailyRefresh()
+		startCpaRotation()
 	})
 }
 

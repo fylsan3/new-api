@@ -26,6 +26,13 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
@@ -46,6 +53,7 @@ import {
   claimResetGrant,
   refreshAccount,
   setAccountDisabled,
+  setAccountShift,
 } from '../api'
 import { isProxyBlocked, quotaLive, socksStateOf } from '../lib/card'
 import {
@@ -57,16 +65,27 @@ import {
   resetButtonHint,
   type ResetButtonHint,
 } from '../lib/quota'
+import {
+  BLOCK_LABEL_KEYS,
+  QUEUE_REASON_KEYS,
+  REASON_LABEL_KEYS,
+  REST_REASON_KEYS,
+  SHIFT_LABEL_KEYS,
+  rateText,
+} from '../lib/rotation'
 import type {
   CpaAccount,
   CpaAccountStats,
   CpaAlert,
   CpaCardUsage,
+  CpaRate,
+  CpaRotationState,
+  ShiftKind,
 } from '../types'
 import { AccountDetails } from './account-details'
 import { ModelsDialog } from './models-dialog'
-import { ResetConfirmDialog } from './reset-confirm-dialog'
 import { QuotaSourceLine } from './quota-source-line'
+import { ResetConfirmDialog } from './reset-confirm-dialog'
 import { ResetCountdownLabel } from './reset-countdown'
 import { SocksBadge } from './socks-badge'
 import { StatsLine } from './stats-line'
@@ -142,6 +161,13 @@ type AccountCardProps = {
   stats: CpaAccountStats | null
   collecting: boolean
   alerts: CpaAlert[]
+  /** This account's row of the pool rotation; null before the first run. */
+  rotation?: CpaRotationState | null
+  rotationEnabled?: boolean
+  /** Off: every rotation mark on the card is hidden (rotation keeps running). */
+  rotationBadges?: boolean
+  /** RPM / TPM of this account; null when the usage queue is not collected. */
+  rate?: CpaRate | null
 }
 
 /** Hover delay before the details popover opens (agreed design: 0.3 s). */
@@ -200,15 +226,40 @@ export function AccountCard(props: AccountCardProps) {
   const stale = !live && !fromChat && !!account.quota_observed_at
   // Notices stack, most urgent first (design draft 2026-11-11, option C):
   // a SOCKS notice no longer hides the reset-grant one.
-  const showSocksNotice = !!socksAlert || (disabled && !!account.auto_disabled_at)
+  const showSocksNotice =
+    !!socksAlert || (disabled && !!account.auto_disabled_at)
   // Direct accounts need no notice: the amber "Direct" badge says it
   // (design draft 2026-11-11, B). Only an invalid proxy_url is a fault.
   const showMissingNotice =
     !showSocksNotice && socks === 'missing' && blocked && account.is_claude
   const showResetsNotice = hasResets
+  // Pool rotation (design draft 2026-11-11): only when the switch is on.
+  const rot =
+    props.rotationEnabled && props.rotationBadges !== false
+      ? (props.rotation ?? null)
+      : null
+  const resting = rot?.state === 'resting'
+  const queued = rot?.state === 'queued'
+  // Dry run: still online, would be resting if the dry run were off.
+  const wouldRest = rot?.state === 'online' && rot.would_rest === true
+  const working =
+    rot?.state === 'online' && rot.participates && rot.worked_hours > 0
+  const held = !!rot?.hold_until && rot.hold_until * 1000 > Date.now()
+  // 401 / 403 stop: shown even with the rotation marks hidden.
+  const authStopped = disabled && !!account.auth_disabled_at
+  const rate = props.rate ?? null
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: OVERVIEW_QUERY_KEY })
+
+  const shiftMutation = useMutation({
+    mutationFn: (shift: ShiftKind) => setAccountShift(ref, shift),
+    onSuccess: () => {
+      toast.success(t('Saved'))
+      invalidate()
+    },
+    onError: (error) => handleServerError(error),
+  })
 
   const refreshMutation = useMutation({
     mutationFn: () => refreshAccount(ref),
@@ -269,7 +320,7 @@ export function AccountCard(props: AccountCardProps) {
         render={
           <div
             className={cn(
-              'bg-card flex w-[300px] flex-none flex-col rounded-lg border px-3.5 py-3 text-[13px] shadow-xs',
+              'bg-card flex h-full w-[300px] flex-col rounded-lg border px-3.5 py-3 text-[13px] shadow-xs',
               claude && CLAUDE_CARD,
               hasResets && 'border-red-500',
               disabled && 'opacity-90'
@@ -302,6 +353,21 @@ export function AccountCard(props: AccountCardProps) {
                   {planLabel}
                 </Badge>
               )}
+              {resting && (
+                <Badge
+                  variant='secondary'
+                  className='h-[18px] bg-sky-100 px-1.5 text-[11px] text-sky-700 dark:bg-sky-500/20 dark:text-sky-300'
+                >
+                  {t('Resting')}
+                </Badge>
+              )}
+              {rot?.shift && (
+                <ShiftBadge
+                  shift={rot.shift}
+                  pending={shiftMutation.isPending}
+                  onChange={(shift) => shiftMutation.mutate(shift)}
+                />
+              )}
             </div>
             <div
               className='text-muted-foreground truncate text-xs'
@@ -330,9 +396,77 @@ export function AccountCard(props: AccountCardProps) {
             usage={props.usage}
             collecting={props.collecting}
           />
+          {rate && <RateLine rate={rate} />}
+          {working && (
+            <div className='text-muted-foreground mt-0.5 text-xs'>
+              {t('Working {{hours}} h in a row', { hours: rot.worked_hours })}
+              {held &&
+                ` · ${t('Woken early, no rest before {{time}}', {
+                  time: dayjs.unix(rot.hold_until ?? 0).format('HH:mm'),
+                })}`}
+            </div>
+          )}
         </div>
 
         {/* Notices */}
+        {authStopped && (
+          <Notice tone='red'>
+            {t('Upstream returned 401 / 403, account disabled automatically')}
+            <br />
+            <span className='text-red-700 dark:text-red-300'>
+              {formatTimestampToDate(account.auth_disabled_at ?? 0)}{' '}
+              {t('Re-enable it after the sign-in is fixed')}
+            </span>
+          </Notice>
+        )}
+        {resting && (
+          <Notice tone='sky'>
+            {'💤 '}
+            {t(REST_REASON_KEYS[rot.reason ?? 'rotation'], {
+              hours: rot.rest_worked_hours ?? rot.worked_hours,
+            })}
+            <div className='mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1'>
+              {rot.rest_until ? (
+                <span className='text-sky-700 dark:text-sky-300'>
+                  {t('Back online automatically at {{time}}', {
+                    time: dayjs.unix(rot.rest_until).format('HH:mm'),
+                  })}
+                </span>
+              ) : null}
+              <Button
+                size='xs'
+                variant='outline'
+                className='h-5 border-sky-500 bg-transparent px-1.5 text-[11px] text-sky-700 hover:bg-sky-100 dark:text-sky-300 dark:hover:bg-sky-500/20'
+                disabled={actionMutation.isPending}
+                onClick={() => setPending('enable')}
+              >
+                {t('Back online now')}
+              </Button>
+            </div>
+          </Notice>
+        )}
+        {queued && (
+          <Notice tone='gray'>
+            {t(QUEUE_REASON_KEYS[rot.reason ?? 'rotation'], {
+              pos: rot.queue_pos ?? 0,
+              hours: rot.worked_hours,
+            })}
+            {rot.blocked && (
+              <div className='mt-0.5'>
+                {t('Held back: {{why}}', {
+                  why: t(BLOCK_LABEL_KEYS[rot.blocked]),
+                })}
+              </div>
+            )}
+          </Notice>
+        )}
+        {wouldRest && (
+          <Notice tone='amber'>
+            {t('Dry run: would be resting now ({{reason}}), still online', {
+              reason: t(REASON_LABEL_KEYS[rot.reason ?? 'rotation']),
+            })}
+          </Notice>
+        )}
         {showSocksNotice && (
           <Notice tone='red'>
             {t('Proxy unreachable, account disabled automatically')}
@@ -410,9 +544,7 @@ export function AccountCard(props: AccountCardProps) {
                           </span>
                         )}
                       </span>
-                      <span
-                        className={cn('shrink-0', LEVEL_TEXT_CLASS[level])}
-                      >
+                      <span className={cn('shrink-0', LEVEL_TEXT_CLASS[level])}>
                         {remainingLabel(remaining, stale, t)}
                       </span>
                     </div>
@@ -518,6 +650,11 @@ export function AccountCard(props: AccountCardProps) {
         sideOffset={8}
         className='max-h-[80vh] w-[300px] overflow-y-auto p-3'
       >
+        {rate && (
+          <div className='mb-3 border-b pb-3'>
+            <RateDetails rate={rate} />
+          </div>
+        )}
         <AccountDetails
           account={account}
           instanceName={props.instanceName}
@@ -527,6 +664,106 @@ export function AccountCard(props: AccountCardProps) {
         />
       </HoverCardContent>
     </HoverCard>
+  )
+}
+
+/**
+ * One-line RPM / TPM of the last minute, then the busiest minute of the
+ * last hour (429s left out). The 5-minute average is in the hover details.
+ */
+function RateLine(props: { rate: CpaRate }) {
+  const { t } = useTranslation()
+  const r = props.rate
+  return (
+    <div className='text-muted-foreground mt-0.5 truncate text-[11px] tabular-nums'>
+      RPM <b className='text-foreground font-medium'>{rateText(r.rpm_1m)}</b>
+      {' · '}
+      TPM <b className='text-foreground font-medium'>{rateText(r.tpm_1m)}</b>
+      <span
+        className='opacity-80'
+        title={t('Busiest minute of the last hour, 429s not counted')}
+      >
+        {'　'}
+        {t('Peak RPM')} {rateText(r.rpm_peak_1h)}
+      </span>
+    </div>
+  )
+}
+
+/** Rate block at the top of the hover details. */
+function RateDetails(props: { rate: CpaRate }) {
+  const { t } = useTranslation()
+  const r = props.rate
+  const rows: [string, string][] = [
+    [t('RPM last minute'), rateText(r.rpm_1m)],
+    [t('TPM last minute'), rateText(r.tpm_1m)],
+    [t('RPM 5 min avg'), rateText(r.rpm_5m)],
+    [t('TPM 5 min avg'), rateText(r.tpm_5m)],
+    [t('Peak RPM, last hour (no 429)'), rateText(r.rpm_peak_1h)],
+    [t('Peak TPM, last hour'), rateText(r.tpm_peak_1h ?? 0)],
+    [t('429 in the last hour'), String(r.r429_1h)],
+  ]
+  return (
+    <div>
+      <div className='mb-1 text-xs font-medium'>{t('Request rate')}</div>
+      <div className='grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs'>
+        {rows.map(([label, value]) => (
+          <div key={label} className='flex justify-between gap-2'>
+            <span className='text-muted-foreground truncate'>{label}</span>
+            <span className='tabular-nums'>{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const SHIFT_BADGE_CLASS: Record<ShiftKind, string> = {
+  day: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200',
+  night:
+    'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-200',
+  all: 'bg-muted text-muted-foreground',
+}
+
+/** Shift badge; click to move the account to another shift. */
+function ShiftBadge(props: {
+  shift: ShiftKind
+  pending: boolean
+  onChange: (shift: ShiftKind) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={props.pending}
+        render={
+          <button
+            type='button'
+            className={cn(
+              'inline-flex h-[18px] flex-none items-center rounded-md px-1.5 text-[11px] font-medium',
+              SHIFT_BADGE_CLASS[props.shift]
+            )}
+            title={t('Click to change the shift')}
+          />
+        }
+      >
+        {t(SHIFT_LABEL_KEYS[props.shift])}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align='start'>
+        <DropdownMenuRadioGroup
+          value={props.shift}
+          onValueChange={(value) => {
+            if (value !== props.shift) props.onChange(value as ShiftKind)
+          }}
+        >
+          {(['day', 'night', 'all'] as ShiftKind[]).map((shift) => (
+            <DropdownMenuRadioItem key={shift} value={shift}>
+              {t(SHIFT_LABEL_KEYS[shift])}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -559,7 +796,9 @@ function ResetGrantButton(props: {
     <Tooltip>
       <TooltipTrigger
         delay={150}
-        render={<span className='inline-flex' tabIndex={props.ready ? -1 : 0} />}
+        render={
+          <span className='inline-flex' tabIndex={props.ready ? -1 : 0} />
+        }
       >
         {button}
       </TooltipTrigger>
@@ -600,6 +839,8 @@ const NOTICE_TONES = {
   amber: 'bg-amber-50 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
   violet:
     'bg-violet-50 text-violet-900 dark:bg-violet-500/15 dark:text-violet-200',
+  sky: 'bg-sky-50 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
+  gray: 'bg-muted text-muted-foreground',
 } as const
 
 function Notice(props: {

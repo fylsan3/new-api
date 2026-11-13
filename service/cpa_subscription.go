@@ -431,7 +431,23 @@ type CpaAccountSnapshot struct {
 	AutoRefreshDone   int     `json:"auto_refresh_done,omitempty"`
 	AutoRefreshLastAt int64   `json:"auto_refresh_last_at,omitempty"`
 	AutoRefreshError  string  `json:"auto_refresh_error,omitempty"`
-	UpdatedAt         int64   `json:"updated_at"`
+	// Account rotation (cpa_subscription_rotation.go). RestUntil > 0 is the
+	// "disabled by rotation" mark: only accounts carrying it are re-enabled.
+	RestStartedAt   int64 `json:"rest_started_at,omitempty"`
+	RestUntil       int64 `json:"rest_until,omitempty"`
+	RestWorkedHours int   `json:"rest_worked_hours,omitempty"`
+	// RotationWorkSince: hours before this moment do not count as work
+	// (set when the account comes back from a rest or is enabled by hand).
+	RotationWorkSince int64 `json:"rotation_work_since,omitempty"`
+	// RestReason: rotation | shift | limit | quota | daily.
+	RestReason string `json:"rest_reason,omitempty"`
+	// RotationHoldUntil: woken early (busy pool / by hand); no rotation or
+	// shift rest before this moment.
+	RotationHoldUntil int64 `json:"rotation_hold_until,omitempty"`
+	// AuthDisabledAt: disabled because upstream returned 401/403. Like the
+	// SOCKS guard, never re-enabled automatically.
+	AuthDisabledAt int64 `json:"auth_disabled_at,omitempty"`
+	UpdatedAt      int64 `json:"updated_at"`
 }
 
 func credentialString(cred map[string]any, key string) string {

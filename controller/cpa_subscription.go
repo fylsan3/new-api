@@ -24,9 +24,11 @@ func init() {
 	auditContentTemplates["cpa_subscription.account_disable"] = "Disabled subscription account ${name} (CPA ${instance_id})"
 	auditContentTemplates["cpa_subscription.token_refresh"] = "Refreshed token of subscription account ${name} (CPA ${instance_id})"
 	auditContentTemplates["cpa_subscription.reset_grant_claim"] = "Claimed reset grant for subscription account ${name}: ${result}"
-	auditContentTemplates["cpa_subscription.settings_update"] = "Updated subscription account refresh settings"
+	auditContentTemplates["cpa_subscription.settings_update"] = "Updated subscription account settings"
 	auditContentTemplates["cpa_subscription.usage_collect"] = "Set usage collection of CPA ${name} (ID: ${id}) to ${enabled}"
 	auditContentTemplates["cpa_subscription.alert_ack"] = "Acknowledged ${count} subscription account alert(s)"
+	auditContentTemplates["cpa_subscription.alert_test"] = "Sent a test alert to ${channel}"
+	auditContentTemplates["cpa_subscription.account_shift"] = "Set shift of subscription account ${name} (CPA ${instance_id}) to ${shift}"
 	auditContentTemplates["cpa_subscription.proxy_reveal"] = "Viewed full proxy address of subscription account ${name} (CPA ${instance_id})"
 }
 
@@ -116,13 +118,22 @@ func ListCpaSubscriptionOverview(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	rates, rateTotal, err := service.ListCpaRates(common.GetTimestamp())
+	if err != nil {
+		// Side feature: the page still opens, just without RPM / TPM.
+		common.SysError("cpa subscription rates: " + err.Error())
+		rates, rateTotal = map[string]service.CpaRate{}, service.CpaRate{}
+	}
 	common.ApiSuccess(c, gin.H{
 		"instances":           views,
+		"rates":               rates,
+		"rate_total":          rateTotal,
 		"accounts":            accounts,
 		"usage":               cardUsage,
 		"alerts":              alerts,
 		"settings":            setting,
 		"refresh_all_running": service.IsCpaRefreshAllRunning(),
+		"rotation":            service.GetCpaRotationSummary(),
 		"now":                 common.GetTimestamp(),
 	})
 }
@@ -403,6 +414,8 @@ func SetCpaAccountStatus(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	// A manual switch always wins over rotation (design draft, section 5).
+	service.ClearCpaRotationOnManualSwitch(req.InstanceID, req.Name, *req.Disabled)
 	common.ApiSuccess(c, nil)
 }
 
@@ -444,13 +457,77 @@ func ClaimCpaAccountResetGrant(c *gin.Context) {
 	common.ApiSuccess(c, result)
 }
 
+// cpaSettingPatch lists every switch / value the page may change (rotation
+// extensions and monitoring, user decisions 2026-11-12). nil = unchanged.
+// Range checks live in setting.Normalize.
+type cpaSettingPatch struct {
+	AutoRefreshEnabled         *bool    `json:"auto_refresh_enabled"`
+	AutoRefreshIntervalMinutes *int     `json:"auto_refresh_interval_minutes"`
+	RefreshAllCooldownSeconds  *int     `json:"refresh_all_cooldown_seconds"`
+	ProxyMonthlyCostUSD        *float64 `json:"proxy_monthly_cost_usd"`
+	RotationEnabled            *bool    `json:"rotation_enabled"`
+	RotationWorkHours          *int     `json:"rotation_work_hours"`
+	RotationRestMinutes        *int     `json:"rotation_rest_minutes"`
+	RotationJitterMinutes      *int     `json:"rotation_jitter_minutes"`
+	RotationMaxRestPercent     *int     `json:"rotation_max_rest_percent"`
+	RotationMinOnline          *int     `json:"rotation_min_online"`
+	RotationExcluded           *string  `json:"rotation_excluded"`
+
+	RotationShowBadges          *bool   `json:"rotation_show_badges"`
+	RotationWake429Enabled      *bool   `json:"rotation_wake_429_enabled"`
+	RotationWake429Minutes      *int    `json:"rotation_wake_429_minutes"`
+	RotationWake429Count        *int    `json:"rotation_wake_429_count"`
+	RotationWakeRpmEnabled      *bool   `json:"rotation_wake_rpm_enabled"`
+	RotationWakeRpm             *int    `json:"rotation_wake_rpm"`
+	RotationWakeBatch           *int    `json:"rotation_wake_batch"`
+	RotationWakeCooldownMinutes *int    `json:"rotation_wake_cooldown_minutes"`
+	RotationWakeHoldMinutes     *int    `json:"rotation_wake_hold_minutes"`
+	RotationWakeRest            *bool   `json:"rotation_wake_rest"`
+	RotationWakeShift           *bool   `json:"rotation_wake_shift"`
+	RotationNightEnabled        *bool   `json:"rotation_night_enabled"`
+	RotationNightStart          *string `json:"rotation_night_start"`
+	RotationNightEnd            *string `json:"rotation_night_end"`
+	RotationNightMaxRestPercent *int    `json:"rotation_night_max_rest_percent"`
+	RotationShiftEnabled        *bool   `json:"rotation_shift_enabled"`
+	RotationDayShiftStart       *string `json:"rotation_day_shift_start"`
+	RotationDayShiftEnd         *string `json:"rotation_day_shift_end"`
+	RotationNightShiftStart     *string `json:"rotation_night_shift_start"`
+	RotationNightShiftEnd       *string `json:"rotation_night_shift_end"`
+	RotationShiftJitterMinutes  *int    `json:"rotation_shift_jitter_minutes"`
+	RotationLimitEnabled        *bool   `json:"rotation_limit_enabled"`
+	RotationLimitMinutes        *int    `json:"rotation_limit_minutes"`
+	RotationLimitCount          *int    `json:"rotation_limit_count"`
+	RotationLimitRestMinutes    *int    `json:"rotation_limit_rest_minutes"`
+	RotationQuotaEnabled        *bool   `json:"rotation_quota_enabled"`
+	RotationQuotaPercent        *int    `json:"rotation_quota_percent"`
+	RotationDailyEnabled        *bool   `json:"rotation_daily_enabled"`
+	RotationDailyHours          *int    `json:"rotation_daily_hours"`
+
+	// Safety gates (user decision 2026-11-12).
+	RotationBatchSize          *int  `json:"rotation_batch_size"`
+	RotationBatchGapMinutes    *int  `json:"rotation_batch_gap_minutes"`
+	RotationCapacityEnabled    *bool `json:"rotation_capacity_enabled"`
+	RotationCapacityRpm        *int  `json:"rotation_capacity_rpm"`
+	RotationCapacityTpm        *int  `json:"rotation_capacity_tpm"`
+	RotationCapacity429Minutes *int  `json:"rotation_capacity_429_minutes"`
+	RotationDryRun             *bool `json:"rotation_dry_run"`
+
+	AuthStopEnabled      *bool `json:"auth_stop_enabled"`
+	AlertWecomEnabled    *bool `json:"alert_wecom_enabled"`
+	AlertDingtalkEnabled *bool `json:"alert_dingtalk_enabled"`
+	AlertOnSocks         *bool `json:"alert_on_socks"`
+	AlertOnAuth          *bool `json:"alert_on_auth"`
+	AlertOnCpa           *bool `json:"alert_on_cpa"`
+	AlertOnRotation      *bool `json:"alert_on_rotation"`
+	// Secrets: "" keeps the saved value, "-" clears it, anything else
+	// replaces it. They are never echoed back.
+	AlertWecomWebhook    *string `json:"alert_wecom_webhook"`
+	AlertDingtalkWebhook *string `json:"alert_dingtalk_webhook"`
+	AlertDingtalkSecret  *string `json:"alert_dingtalk_secret"`
+}
+
 func UpdateCpaSubscriptionSettings(c *gin.Context) {
-	var req struct {
-		AutoRefreshEnabled         *bool    `json:"auto_refresh_enabled"`
-		AutoRefreshIntervalMinutes *int     `json:"auto_refresh_interval_minutes"`
-		RefreshAllCooldownSeconds  *int     `json:"refresh_all_cooldown_seconds"`
-		ProxyMonthlyCostUSD        *float64 `json:"proxy_monthly_cost_usd"`
-	}
+	var req cpaSettingPatch
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
 		common.ApiErrorMsg(c, "invalid request body")
 		return
@@ -472,17 +549,268 @@ func UpdateCpaSubscriptionSettings(c *gin.Context) {
 	if req.ProxyMonthlyCostUSD != nil {
 		setting.ProxyMonthlyCostUSD = *req.ProxyMonthlyCostUSD
 	}
+	rotationTouched := applyCpaRotationPatch(setting, &req, common.GetTimestamp())
+	changedSecrets, err := applyCpaAlertSecrets(setting, &req)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	if err := model.SaveCpaSubscriptionSetting(setting); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	recordManageAudit(c, "cpa_subscription.settings_update", map[string]any{
-		"auto_refresh_enabled":          setting.AutoRefreshEnabled,
-		"auto_refresh_interval_minutes": setting.AutoRefreshIntervalMinutes,
-		"refresh_all_cooldown_seconds":  setting.RefreshAllCooldownSeconds,
-		"proxy_monthly_cost_usd":        setting.ProxyMonthlyCostUSD,
-	})
+	params := map[string]any{}
+	if raw, err := common.Marshal(setting); err == nil {
+		_ = common.Unmarshal(raw, &params)
+	}
+	delete(params, "rotation_shifts")
+	if len(changedSecrets) > 0 {
+		params["changed_secrets"] = changedSecrets
+	}
+	recordManageAudit(c, "cpa_subscription.settings_update", params)
+	if rotationTouched {
+		service.TriggerCpaRotation()
+	}
 	common.ApiSuccess(c, setting)
+}
+
+// applyCpaRotationPatch copies the rotation fields of the request. Turning
+// the switch on stamps RotationEnabledAt, so work hours count from that
+// moment and nobody goes resting for what it did before.
+func applyCpaRotationPatch(setting *model.CpaSubscriptionSetting, req *cpaSettingPatch, now int64) bool {
+	wasEnabled := setting.RotationEnabled
+	touched := applyRotationSettings(setting, req.RotationEnabled, req.RotationWorkHours, req.RotationRestMinutes,
+		req.RotationJitterMinutes, req.RotationMaxRestPercent, req.RotationMinOnline, req.RotationExcluded)
+	if applyRotationExtSettings(setting, req) {
+		touched = true
+	}
+	if setting.RotationEnabled && !wasEnabled {
+		setting.RotationEnabledAt = now
+	}
+	return touched
+}
+
+// PreviewCpaRotation answers "what would happen if I saved this": the
+// request is applied to a copy of the settings and planned, nothing is
+// saved and no account is touched.
+func PreviewCpaRotation(c *gin.Context) {
+	var req cpaSettingPatch
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiErrorMsg(c, "invalid request body")
+		return
+	}
+	setting, err := model.GetCpaSubscriptionSetting()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	draft := *setting
+	applyCpaRotationPatch(&draft, &req, common.GetTimestamp())
+	summary, err := service.PreviewCpaRotation(&draft)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, summary)
+}
+
+// StopCpaRotation is the emergency button: switch rotation off and bring
+// every resting account back right away.
+func StopCpaRotation(c *gin.Context) {
+	woken, failed, err := service.StopCpaRotationNow()
+	recordManageAudit(c, "cpa_subscription.rotation_stop", map[string]any{"woken": woken, "failed": failed, "success": err == nil})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"woken": woken, "failed": failed})
+}
+
+func applyRotationExtSettings(s *model.CpaSubscriptionSetting, r *cpaSettingPatch) bool {
+	touched := false
+	b := func(dst *bool, v *bool) {
+		if v != nil {
+			*dst, touched = *v, true
+		}
+	}
+	n := func(dst *int, v *int) {
+		if v != nil {
+			*dst, touched = *v, true
+		}
+	}
+	t := func(dst *string, v *string) {
+		if v != nil {
+			*dst, touched = strings.TrimSpace(*v), true
+		}
+	}
+	b(&s.RotationShowBadges, r.RotationShowBadges)
+	b(&s.RotationWake429Enabled, r.RotationWake429Enabled)
+	n(&s.RotationWake429Minutes, r.RotationWake429Minutes)
+	n(&s.RotationWake429Count, r.RotationWake429Count)
+	b(&s.RotationWakeRpmEnabled, r.RotationWakeRpmEnabled)
+	n(&s.RotationWakeRpm, r.RotationWakeRpm)
+	n(&s.RotationWakeBatch, r.RotationWakeBatch)
+	n(&s.RotationWakeCooldownMinutes, r.RotationWakeCooldownMinutes)
+	n(&s.RotationWakeHoldMinutes, r.RotationWakeHoldMinutes)
+	b(&s.RotationWakeRest, r.RotationWakeRest)
+	b(&s.RotationWakeShift, r.RotationWakeShift)
+	b(&s.RotationNightEnabled, r.RotationNightEnabled)
+	t(&s.RotationNightStart, r.RotationNightStart)
+	t(&s.RotationNightEnd, r.RotationNightEnd)
+	n(&s.RotationNightMaxRestPercent, r.RotationNightMaxRestPercent)
+	b(&s.RotationShiftEnabled, r.RotationShiftEnabled)
+	t(&s.RotationDayShiftStart, r.RotationDayShiftStart)
+	t(&s.RotationDayShiftEnd, r.RotationDayShiftEnd)
+	t(&s.RotationNightShiftStart, r.RotationNightShiftStart)
+	t(&s.RotationNightShiftEnd, r.RotationNightShiftEnd)
+	n(&s.RotationShiftJitterMinutes, r.RotationShiftJitterMinutes)
+	b(&s.RotationLimitEnabled, r.RotationLimitEnabled)
+	n(&s.RotationLimitMinutes, r.RotationLimitMinutes)
+	n(&s.RotationLimitCount, r.RotationLimitCount)
+	n(&s.RotationLimitRestMinutes, r.RotationLimitRestMinutes)
+	b(&s.RotationQuotaEnabled, r.RotationQuotaEnabled)
+	n(&s.RotationQuotaPercent, r.RotationQuotaPercent)
+	b(&s.RotationDailyEnabled, r.RotationDailyEnabled)
+	n(&s.RotationDailyHours, r.RotationDailyHours)
+	n(&s.RotationBatchSize, r.RotationBatchSize)
+	n(&s.RotationBatchGapMinutes, r.RotationBatchGapMinutes)
+	b(&s.RotationCapacityEnabled, r.RotationCapacityEnabled)
+	n(&s.RotationCapacityRpm, r.RotationCapacityRpm)
+	n(&s.RotationCapacityTpm, r.RotationCapacityTpm)
+	n(&s.RotationCapacity429Minutes, r.RotationCapacity429Minutes)
+	b(&s.RotationDryRun, r.RotationDryRun)
+	// Monitoring switches do not need a rotation run.
+	b2 := func(dst *bool, v *bool) {
+		if v != nil {
+			*dst = *v
+		}
+	}
+	b2(&s.AuthStopEnabled, r.AuthStopEnabled)
+	b2(&s.AlertWecomEnabled, r.AlertWecomEnabled)
+	b2(&s.AlertDingtalkEnabled, r.AlertDingtalkEnabled)
+	b2(&s.AlertOnSocks, r.AlertOnSocks)
+	b2(&s.AlertOnAuth, r.AlertOnAuth)
+	b2(&s.AlertOnCpa, r.AlertOnCpa)
+	b2(&s.AlertOnRotation, r.AlertOnRotation)
+	return touched
+}
+
+// applyCpaAlertSecrets encrypts new webhook URLs / the DingTalk secret.
+func applyCpaAlertSecrets(s *model.CpaSubscriptionSetting, r *cpaSettingPatch) ([]string, error) {
+	var changed []string
+	set := func(name string, dst *string, v *string, isURL bool) error {
+		if v == nil || strings.TrimSpace(*v) == "" {
+			return nil
+		}
+		plain := strings.TrimSpace(*v)
+		changed = append(changed, name)
+		if plain == "-" {
+			*dst = ""
+			return nil
+		}
+		if isURL {
+			if err := service.ValidateCpaWebhookURL(plain); err != nil {
+				return err
+			}
+		}
+		enc, err := service.EncryptCpaSecret(plain)
+		if err != nil {
+			return err
+		}
+		*dst = enc
+		return nil
+	}
+	if err := set("wecom_webhook", &s.AlertWecomWebhookEnc, r.AlertWecomWebhook, true); err != nil {
+		return nil, err
+	}
+	if err := set("dingtalk_webhook", &s.AlertDingtalkWebhookEnc, r.AlertDingtalkWebhook, true); err != nil {
+		return nil, err
+	}
+	if err := set("dingtalk_secret", &s.AlertDingtalkSecretEnc, r.AlertDingtalkSecret, false); err != nil {
+		return nil, err
+	}
+	return changed, nil
+}
+
+// TestCpaAlertChannel sends a test message to one saved channel.
+func TestCpaAlertChannel(c *gin.Context) {
+	var req struct {
+		Channel string `json:"channel"`
+	}
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiErrorMsg(c, "invalid request body")
+		return
+	}
+	err := service.SendCpaTestNotify(req.Channel)
+	recordManageAudit(c, "cpa_subscription.alert_test", map[string]any{"channel": req.Channel, "ok": err == nil})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
+// GetCpaRateSeries serves the RPM / TPM chart (one account or the pool).
+func GetCpaRateSeries(c *gin.Context) {
+	instanceID, _ := strconv.Atoi(c.Query("instance_id"))
+	series, err := service.BuildCpaRateSeries(instanceID, c.Query("name"), c.DefaultQuery("range", "1h"), common.GetTimestamp())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, series)
+}
+
+// SetCpaAccountShiftHandler changes one account's shift.
+func SetCpaAccountShiftHandler(c *gin.Context) {
+	var req struct {
+		InstanceID int    `json:"instance_id"`
+		Name       string `json:"name"`
+		Shift      string `json:"shift"`
+	}
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil || req.InstanceID <= 0 || strings.TrimSpace(req.Name) == "" {
+		common.ApiErrorMsg(c, "invalid request body")
+		return
+	}
+	err := service.SetCpaAccountShift(req.InstanceID, req.Name, req.Shift)
+	recordManageAudit(c, "cpa_subscription.account_shift", map[string]any{"instance_id": req.InstanceID, "name": req.Name, "shift": req.Shift})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
+// applyRotationSettings copies the provided rotation fields; it reports
+// whether any was present. Range checks live in setting.Normalize.
+func applyRotationSettings(setting *model.CpaSubscriptionSetting, enabled *bool, work, rest, jitter, percent, minOnline *int, excluded *string) bool {
+	touched := false
+	setBool := func(dst *bool, v *bool) {
+		if v != nil {
+			*dst, touched = *v, true
+		}
+	}
+	setInt := func(dst *int, v *int) {
+		if v != nil {
+			*dst, touched = *v, true
+		}
+	}
+	setBool(&setting.RotationEnabled, enabled)
+	setInt(&setting.RotationWorkHours, work)
+	setInt(&setting.RotationRestMinutes, rest)
+	setInt(&setting.RotationJitterMinutes, jitter)
+	setInt(&setting.RotationMaxRestPercent, percent)
+	setInt(&setting.RotationMinOnline, minOnline)
+	if excluded != nil {
+		lines := make([]string, 0)
+		for _, line := range strings.Split(*excluded, "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				lines = append(lines, line)
+			}
+		}
+		setting.RotationExcluded, touched = strings.Join(lines, "\n"), true
+	}
+	return touched
 }
 
 func GetCpaSubscriptionStats(c *gin.Context) {

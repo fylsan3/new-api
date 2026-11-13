@@ -53,8 +53,10 @@ import {
 import { socksStateOf, type SocksState } from '../lib/card'
 import { accountDisplayName, buildCostSummary } from '../lib/pool'
 import { PLAN_LABEL_KEYS } from '../lib/quota'
+import { rateText } from '../lib/rotation'
 import type { CpaAccount, CpaAccountStats } from '../types'
 import { CycleSection } from './cycle-section'
+import { RateChart } from './rate-chart'
 import { Section } from './stats-panel'
 
 const RANGE_OPTIONS = [7, 14, 30] as const
@@ -345,7 +347,9 @@ export function SubscriptionStatsSection() {
       <Section
         icon={<Table2 />}
         title={t('Account comparison')}
-        description={t('Click a column header to sort')}
+        description={t(
+          'Click a column header to sort. Tokens here include cache reads and writes.'
+        )}
       >
         {loading ? (
           <Skeleton className='m-3 h-40' />
@@ -360,13 +364,16 @@ export function SubscriptionStatsSection() {
                 {header('revenue_usd', t('New API revenue (est.)'))}
                 {header('cost_usd', t('Official API price'))}
                 {header('five_hour', t('5h / 7d left'))}
+                <TableHead className='text-right'>
+                  {t('RPM / TPM (5 min avg)')}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className='text-muted-foreground text-center text-xs'
                   >
                     {t('No data')}
@@ -376,6 +383,7 @@ export function SubscriptionStatsSection() {
               {rows.map((row) => {
                 const left5 = remaining(row.five_hour)
                 const left7 = remaining(row.seven_day)
+                const rate = overview.data?.rates?.[row.key]
                 return (
                   <TableRow key={row.key}>
                     <TableCell className='max-w-56 truncate'>
@@ -430,12 +438,30 @@ export function SubscriptionStatsSection() {
                             left7 === null ? '-' : `${Math.round(left7)}%`
                           }`}
                     </TableCell>
+                    <TableCell className='text-right tabular-nums'>
+                      {rate
+                        ? `${rateText(rate.rpm_5m)} / ${rateText(rate.tpm_5m)}`
+                        : '-'}
+                    </TableCell>
                   </TableRow>
                 )
               })}
             </TableBody>
           </Table>
         )}
+      </Section>
+
+      {/* request rate */}
+      <Section
+        icon={<LineChart />}
+        title={t('Pool request rate')}
+        description={t(
+          'All accounts together. Bars are the busiest minute of each period, the line is its per-minute average; the last hour is drawn minute by minute. Failed requests are red, 429s are left out.'
+        )}
+      >
+        <div className='p-3'>
+          <RateChart height={240} />
+        </div>
       </Section>
 
       {/* ④ quota trend */}

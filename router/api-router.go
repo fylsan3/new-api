@@ -367,6 +367,11 @@ func SetApiRouter(router *gin.Engine) {
 			cpaSubscriptionRoute.GET("/cycles", controller.GetCpaSubscriptionCycles)
 			cpaSubscriptionRoute.GET("/alerts", controller.ListCpaAlerts)
 			cpaSubscriptionRoute.POST("/alerts/ack", controller.AcknowledgeCpaAlerts)
+			cpaSubscriptionRoute.POST("/alerts/test", controller.TestCpaAlertChannel)
+			cpaSubscriptionRoute.GET("/rate-series", controller.GetCpaRateSeries)
+			cpaSubscriptionRoute.POST("/account/shift", controller.SetCpaAccountShiftHandler)
+			cpaSubscriptionRoute.POST("/rotation/preview", controller.PreviewCpaRotation)
+			cpaSubscriptionRoute.POST("/rotation/stop", controller.StopCpaRotation)
 		}
 
 		dataRoute := apiRouter.Group("/data")

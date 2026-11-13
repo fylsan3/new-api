@@ -322,6 +322,7 @@ func CollectCpaUsage(ctx context.Context, instance *model.CpaInstance) (int, err
 	if pollErr != nil {
 		state["usage_last_error"] = truncateText(pollErr.Error(), 500)
 	}
+	noteCpaCollectHealth(instance, pollErr)
 	_ = model.UpdateCpaInstanceUsageState(instance.ID, state)
 	return total, pollErr
 }
@@ -338,6 +339,18 @@ func storeCpaUsage(instanceID int, records []cpaUsageQueueRecord) error {
 			return err
 		}
 	}
+	// Side feature (RPM / TPM): a failure here must not fail the hourly
+	// collection above nor skip the last-request update below.
+	var minuteErr error
+	for _, row := range aggregateCpaMinutes(instanceID, records) {
+		if err := model.AddCpaUsageMinute(row); err != nil {
+			minuteErr = err
+		}
+	}
+	if minuteErr != nil {
+		common.SysError(fmt.Sprintf("cpa usage minute store failed for instance %d (RPM / TPM only): %v", instanceID, minuteErr))
+	}
+	handleCpaAuthFailures(instanceID, records)
 	if len(latest) == 0 {
 		return nil
 	}
@@ -395,6 +408,7 @@ func startCpaUsageCollector() {
 					now := time.Now()
 					_ = model.PruneCpaStats(now.Add(-cpaUsageRetention).Unix(), now.Add(-cpaQuotaRetention).Unix())
 					_ = model.PruneCpaUsageFail(now.Add(-cpaUsageRetention).Unix())
+					_ = model.PruneCpaUsageMinutes(now.Add(-cpaMinuteRetention).Unix())
 					closeExpiredCpaQuotaCycles(now.Unix())
 				}
 			}
@@ -435,6 +449,14 @@ func trackCpaProxyHealth(snap *CpaAccountSnapshot, proxyErr error) {
 		return
 	}
 	snap.ProxyFailStreak++
+	if snap.RestUntil > 0 && snap.ProxyFailStreak >= cpaProxyFailDisableThreshold {
+		// Resting account (already disabled by rotation): the SOCKS guard
+		// takes over, the rotation mark goes so it is never re-enabled.
+		snap.RestStartedAt, snap.RestUntil, snap.RestWorkedHours = 0, 0, 0
+		snap.AutoDisabledAt = common.GetTimestamp()
+		cpaAutoDisableAccount(snap.InstanceID, snap.Name, snap.ProxyFailStreak, proxyErr.Error())
+		return
+	}
 	if snap.ProxyFailStreak < cpaProxyFailDisableThreshold || credentialBool(snap.Credential, "disabled") {
 		return
 	}
@@ -462,6 +484,7 @@ var cpaAutoDisableAccount = func(instanceID int, name string, streak int, reason
 		if err := model.RaiseCpaAlert(instanceID, name, kind, msg); err != nil {
 			common.SysError("cpa alert save failed: " + err.Error())
 		}
+		NotifyCpaEvent(CpaNotifySocks, instanceID, name, msg)
 		common.SysLog(fmt.Sprintf("cpa subscription %s: %s", name, msg))
 	})
 }
