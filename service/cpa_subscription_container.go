@@ -24,9 +24,18 @@ func applyContainerObservation(snap *CpaAccountSnapshot) {
 		return
 	}
 	snap.ResetGrants = nil
-	snap.ResetGrantsError = "container CPA does not support reset grants"
+	snap.ResetGrantsError = ""
 	observation, _ := snap.Credential["container_observation"].(map[string]any)
 	usage, _ := observation["usage"].(map[string]any)
+	if values, ok := usage["values"].(map[string]any); ok {
+		if grants, ok := values["cedar_ember"].(map[string]any); ok {
+			snap.ResetGrants = grants
+		}
+	}
+	if message, ok := usage["error"].(string); ok {
+		snap.ResetGrantsError = message
+	}
+
 	if values, ok := usage["values"].(map[string]any); ok {
 		stamp, _ := usage["observed_at"].(string)
 		if observed, err := time.Parse(time.RFC3339, stamp); err == nil && observed.Unix() >= snap.QuotaObservedAt {

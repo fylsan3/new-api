@@ -60,6 +60,7 @@ import {
   PLAN_LABEL_KEYS,
   buildEffectiveQuota,
   buildResetGrants,
+  supportsResetGrant,
   quotaLevel,
   remainingPercent,
   resetButtonHint,
@@ -587,7 +588,7 @@ export function AccountCard(props: AccountCardProps) {
           >
             {t('Models')}
           </Button>
-          {account.is_claude && hasResets && (
+          {account.is_claude && hasResets && supportsResetGrant(account) && (
             <ResetGrantButton
               ready={resetReady}
               hint={resetHint}

@@ -1,3 +1,7 @@
+## 容器重置卡只读观测
+
+从中央 CPA 的 account observation 导入 sanitized cedar_ember，不直连容器/Anthropic。保持消费接口拒绝，只有明确声明 reset_grant=true 的容器才显示消费按钮；旧 CPA 分支不变。重置卡使用确认与持久防重复设计见配套 CPA 的 RESET_GRANTS_BROWSER_CN.md，消费尚未接通。数据库结构不变。
+
 ## 2026-11-25：对接容器 CPA（container-native4）
 
 - 根据 `credential.source=container` 识别独立账号容器，账号列表同步导入已裁剪的资料/用量观测；五秒本地同步不查询 Anthropic。手动用量刷新、令牌刷新及查看 SOCKS 走 CPA 的容器管理动作，不再下载凭据或使用宿主机通用 api-call。旧 CPA 的原有分支保留。

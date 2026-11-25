@@ -446,3 +446,10 @@ export function sortAccounts(accounts: CpaAccount[]): CpaAccount[] {
     })
     .map((item) => item.account)
 }
+
+/** Container grants may be readable before spending is enabled server-side. */
+export function supportsResetGrant(account: Pick<CpaAccount, 'credential'>): boolean {
+  if (account.credential?.source !== 'container') return true
+  const capabilities = account.credential.container_capabilities
+  return isRecord(capabilities) && capabilities.reset_grant === true
+}

@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, it } from 'vitest'
 
-import { resetButtonHint } from '../lib/quota'
+import { resetButtonHint, supportsResetGrant } from '../lib/quota'
 import type { QuotaWindow } from '../types'
 
 const NOW = Date.parse('2026-11-11T06:00:00Z')
@@ -94,4 +94,13 @@ describe('resetButtonHint', () => {
     const c = block({}, [grant({ id: 'a', paused: true }), grant({ id: 'b', usable_now: false })])
     expect(resetButtonHint(c, NONE, NOW)).toEqual({ kind: 'paused' })
   })
+})
+
+describe('reset grant capability', () => {
+ it('keeps a readable container grant from offering a spending action', () => {
+  expect(supportsResetGrant({credential:{source:'container',container_capabilities:{reset_grant_read:true,reset_grant:false}}})).toBe(false)
+  expect(supportsResetGrant({credential:{source:'container'}})).toBe(false)
+  expect(supportsResetGrant({credential:{source:'container',container_capabilities:{reset_grant:true}}})).toBe(true)
+  expect(supportsResetGrant({credential:{source:'file'}})).toBe(true)
+ })
 })

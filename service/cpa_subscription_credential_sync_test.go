@@ -156,7 +156,7 @@ func TestContainerCPARoutesAndQuotaRefresh(t *testing.T) {
 	var calls []string
 	credential := func() map[string]any {
 		return map[string]any{"id": "container-a", "name": "a", "source": "container", "provider": "claude", "auth_index": "opaque-a", "container_observation": map[string]any{
-			"usage":   map[string]any{"observed_at": "2026-11-25T12:00:00Z", "values": map[string]any{"limits": []any{map[string]any{"kind": "weekly_scoped", "percent": percent, "scope": map[string]any{"model": map[string]any{"display_name": "Fable 5"}}}}}},
+			"usage":   map[string]any{"observed_at": "2026-11-25T12:00:00Z", "values": map[string]any{"cedar_ember": map[string]any{"eligible": true, "grants": []any{map[string]any{"id": "fixture-grant", "resets_left": 2}}}, "limits": []any{map[string]any{"kind": "weekly_scoped", "percent": percent, "scope": map[string]any{"model": map[string]any{"display_name": "Fable 5"}}}}}},
 			"profile": map[string]any{"values": map[string]any{"subscription_type": "pro"}},
 		}}
 	}
@@ -197,7 +197,7 @@ func TestContainerCPARoutesAndQuotaRefresh(t *testing.T) {
 	require.NoError(t, err)
 	limits := snap.Usage["limits"].([]any)
 	assert.Equal(t, 5.0, limits[0].(map[string]any)["percent"])
-	assert.Nil(t, snap.ResetGrants)
+	assert.NotNil(t, snap.ResetGrants)
 	require.NoError(t, RefreshCpaAccountToken(context.Background(), instance.ID, "a"))
 	before := len(calls)
 	_, err = ClaimCpaResetGrant(context.Background(), instance.ID, "a")
