@@ -172,6 +172,12 @@ func RefreshCpaPlanAndGrants(ctx context.Context, instanceID int, name string) e
 		snap.AutoRefreshDone++
 	}
 	snap.AutoRefreshLastAt = common.GetTimestamp()
+	if isContainerAccount(snap) {
+		// Container CPA owns its upstream refresh schedule; this background task
+		// only imports the observation already cached by the credential sync.
+		applyContainerObservation(snap)
+		return saveSnapshot(snap)
+	}
 	authIndex := credentialString(snap.Credential, "auth_index")
 	if !snap.IsClaude || credentialBool(snap.Credential, "disabled") || authIndex == "" {
 		return saveSnapshot(snap)

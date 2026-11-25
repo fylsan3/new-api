@@ -268,6 +268,7 @@ const SIGNAL_PREFIX = 'Anthropic-Ratelimit-Unified-'
 const PASSIVE_WINDOWS = [
   { tag: '5h', id: 'five-hour', labelKey: '5-hour limit' },
   { tag: '7d', id: 'seven-day', labelKey: '7-day limit' },
+  { tag: '7d_oi', id: 'seven-day-fable', labelKey: '7-day Fable' },
 ] as const
 
 export type PassiveQuota = {
@@ -287,7 +288,8 @@ function signalOf(signals: Rec, name: string): string | null {
 export function buildPassiveQuota(
   credential: Rec | undefined
 ): PassiveQuota | null {
-  const quota = credential && isRecord(credential.quota) ? credential.quota : null
+  const quota =
+    credential && isRecord(credential.quota) ? credential.quota : null
   const signals = quota && isRecord(quota.signals) ? quota.signals : null
   const observedMs = Date.parse(toStr(quota?.observed_at) ?? '')
   if (!signals || Number.isNaN(observedMs)) return null
@@ -342,6 +344,9 @@ export function buildEffectiveQuota(
   windows = windows.map((window) => {
     const resetMs = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN
     if (Number.isNaN(resetMs) || resetMs > nowMs) return window
+    if (account.credential?.source === 'container') {
+      return { ...window, resetDone: false }
+    }
     return { ...window, usedPercent: 0, limited: false, resetDone: true }
   })
   return { windows, source, observedAt }

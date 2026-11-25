@@ -75,6 +75,7 @@ func SyncCpaInstance(ctx context.Context, instance *model.CpaInstance) (map[stri
 		snap, loadErr := loadSnapshot(instance.ID, name)
 		if loadErr == nil {
 			snap.Credential = cred
+			applyContainerObservation(snap)
 			snap.CredentialSyncedAt = common.GetTimestamp()
 			snap.IsClaude = isClaudeCredential(cred)
 			_ = saveSnapshot(snap)
@@ -143,6 +144,7 @@ func syncCpaAccountCredential(ctx context.Context, instanceID int, name string) 
 			return loadErr
 		}
 		snap.Credential = cred
+		applyContainerObservation(snap)
 		snap.CredentialSyncedAt = common.GetTimestamp()
 		snap.IsClaude = isClaudeCredential(cred)
 		return saveSnapshot(snap)
@@ -169,6 +171,9 @@ func RefreshCpaAccount(ctx context.Context, instanceID int, name string) (*CpaAc
 	}
 	if snap.Credential == nil {
 		return nil, ErrCpaAccountNotFound
+	}
+	if isContainerAccount(snap) {
+		return refreshContainerAccount(ctx, client, snap)
 	}
 	authIndex := credentialString(snap.Credential, "auth_index")
 
@@ -481,6 +486,13 @@ func RefreshCpaAccountToken(ctx context.Context, instanceID int, name string) er
 	if err != nil {
 		return err
 	}
+	if isContainerAccount(snap) {
+		if err := client.containerAction(ctx, name, "auth-refresh", nil); err != nil {
+			return err
+		}
+		resyncInstance(instanceID)
+		return nil
+	}
 	// Token refresh goes to Anthropic through CPA with the account proxy; an
 	// empty or malformed proxy would make CPA connect directly.
 	if _, err := client.requireSocksProxy(ctx, name); err != nil {
@@ -499,9 +511,18 @@ func RefreshCpaAccountToken(ctx context.Context, instanceID int, name string) er
 
 // RevealCpaAccountProxy reads the account's proxy_url from CPA unmasked.
 func RevealCpaAccountProxy(ctx context.Context, instanceID int, name string) (string, error) {
-	client, _, err := clientForAccount(instanceID, name)
+	client, snap, err := clientForAccount(instanceID, name)
 	if err != nil {
 		return "", err
+	}
+	if isContainerAccount(snap) {
+		var result struct {
+			ProxyURL string `json:"proxy_url"`
+		}
+		if err := client.containerAction(ctx, name, "proxy-view", &result); err != nil {
+			return "", err
+		}
+		return result.ProxyURL, nil
 	}
 	return client.credentialProxyURL(ctx, name)
 }
@@ -656,6 +677,9 @@ func ClaimCpaResetGrant(ctx context.Context, instanceID int, name string) (*CpaR
 	client, snap, err := clientForAccount(instanceID, name)
 	if err != nil {
 		return nil, err
+	}
+	if isContainerAccount(snap) {
+		return nil, errors.New("container CPA does not support reset grants")
 	}
 	authIndex := credentialString(snap.Credential, "auth_index")
 	if authIndex == "" {

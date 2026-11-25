@@ -117,6 +117,7 @@ func updateCachedCredential(instanceID int, name string, cred map[string]any) {
 		return
 	}
 	snap.Credential = cred
+	applyContainerObservation(snap)
 	snap.CredentialSyncedAt = common.GetTimestamp()
 	snap.IsClaude = isClaude
 	_ = saveSnapshot(snap)

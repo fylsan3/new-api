@@ -41,7 +41,13 @@ function signals(extra: Record<string, string> = {}) {
 }
 
 function account(over: Partial<CpaAccount> = {}): CpaAccount {
-  return { instance_id: 1, name: 'a.json', is_claude: true, updated_at: 0, ...over }
+  return {
+    instance_id: 1,
+    name: 'a.json',
+    is_claude: true,
+    updated_at: 0,
+    ...over,
+  }
 }
 
 describe('passive quota from chats', () => {
@@ -49,33 +55,57 @@ describe('passive quota from chats', () => {
     const quota = buildPassiveQuota({
       quota: {
         observed_at: new Date(NOW_MS - 12_000).toISOString(),
-        signals: signals({ 'Anthropic-Ratelimit-Unified-5h-Status': 'rejected' }),
+        signals: signals({
+          'Anthropic-Ratelimit-Unified-5h-Status': 'rejected',
+        }),
       },
     })
     expect(quota?.observedAt).toBe(NOW_SEC - 12)
-    expect(quota?.windows.map((w) => [w.id, Math.round(w.usedPercent ?? -1), w.limited])).toEqual([
+    expect(
+      quota?.windows.map((w) => [
+        w.id,
+        Math.round(w.usedPercent ?? -1),
+        w.limited,
+      ])
+    ).toEqual([
       ['five-hour', 28, true],
       ['seven-day', 53, false],
     ])
-    expect(Date.parse(quota?.windows[0].resetsAt ?? '')).toBe(NOW_MS + 7_200_000)
+    expect(Date.parse(quota?.windows[0].resetsAt ?? '')).toBe(
+      NOW_MS + 7_200_000
+    )
   })
 
   it('returns null without signals or observed_at', () => {
     expect(buildPassiveQuota(undefined)).toBeNull()
     expect(buildPassiveQuota({ quota: { signals: signals() } })).toBeNull()
     expect(
-      buildPassiveQuota({ quota: { observed_at: '2026-11-06T00:00:00Z', signals: {} } })
+      buildPassiveQuota({
+        quota: { observed_at: '2026-11-06T00:00:00Z', signals: {} },
+      })
     ).toBeNull()
   })
 
   it('uses the newer source and keeps other windows from the refresh', () => {
     const usage = {
-      five_hour: { utilization: 90, resets_at: new Date(NOW_MS + 3_600_000).toISOString() },
-      seven_day: { utilization: 90, resets_at: new Date(NOW_MS + 86_400_000).toISOString() },
-      seven_day_opus: { utilization: 40, resets_at: new Date(NOW_MS + 86_400_000).toISOString() },
+      five_hour: {
+        utilization: 90,
+        resets_at: new Date(NOW_MS + 3_600_000).toISOString(),
+      },
+      seven_day: {
+        utilization: 90,
+        resets_at: new Date(NOW_MS + 86_400_000).toISOString(),
+      },
+      seven_day_opus: {
+        utilization: 40,
+        resets_at: new Date(NOW_MS + 86_400_000).toISOString(),
+      },
     }
     const credential = {
-      quota: { observed_at: new Date(NOW_MS - 5_000).toISOString(), signals: signals() },
+      quota: {
+        observed_at: new Date(NOW_MS - 5_000).toISOString(),
+        signals: signals(),
+      },
     }
     const chatNewer = buildEffectiveQuota(
       account({ usage, credential, quota_observed_at: NOW_SEC - 3600 }),
@@ -83,7 +113,9 @@ describe('passive quota from chats', () => {
     )
     expect(chatNewer.source).toBe('chat')
     expect(chatNewer.observedAt).toBe(NOW_SEC - 5)
-    expect(chatNewer.windows.map((w) => [w.id, Math.round(w.usedPercent ?? -1)])).toEqual([
+    expect(
+      chatNewer.windows.map((w) => [w.id, Math.round(w.usedPercent ?? -1)])
+    ).toEqual([
       ['five-hour', 28],
       ['seven-day', 53],
       ['seven-day-opus', 40],
@@ -108,7 +140,11 @@ describe('passive quota from chats', () => {
       },
     }
     const quota = buildEffectiveQuota(account({ credential }), NOW_MS)
-    expect(quota.windows[0]).toMatchObject({ usedPercent: 0, resetDone: true, limited: false })
+    expect(quota.windows[0]).toMatchObject({
+      usedPercent: 0,
+      resetDone: true,
+      limited: false,
+    })
     expect(quota.windows[1].resetDone).toBeUndefined()
   })
 
@@ -124,7 +160,62 @@ describe('passive quota from chats', () => {
 describe('daily random refresh', () => {
   it('returns the next planned slot or null when done', () => {
     expect(nextAutoRefreshAt(account())).toBeNull()
-    expect(nextAutoRefreshAt(account({ auto_refresh_plan: [10, 20], auto_refresh_done: 1 }))).toBe(20)
-    expect(nextAutoRefreshAt(account({ auto_refresh_plan: [10, 20], auto_refresh_done: 2 }))).toBeNull()
+    expect(
+      nextAutoRefreshAt(
+        account({ auto_refresh_plan: [10, 20], auto_refresh_done: 1 })
+      )
+    ).toBe(20)
+    expect(
+      nextAutoRefreshAt(
+        account({ auto_refresh_plan: [10, 20], auto_refresh_done: 2 })
+      )
+    ).toBeNull()
   })
+})
+
+it('updates Fable from a newer container observation without inventing a reset', () => {
+  const credential = {
+    source: 'container',
+    quota: {
+      observed_at: new Date(NOW_MS).toISOString(),
+      signals: {
+        'Anthropic-Ratelimit-Unified-7d_oi-Utilization': '0.05',
+        'Anthropic-Ratelimit-Unified-7d_oi-Reset': String(NOW_SEC + 7200),
+      },
+    },
+  }
+  const value = buildEffectiveQuota(
+    account({
+      credential,
+      quota_observed_at: NOW_SEC - 10,
+      usage: {
+        limits: [
+          {
+            kind: 'weekly_scoped',
+            percent: 90,
+            scope: { model: { display_name: 'Fable 5' } },
+            resets_at: new Date(NOW_MS - 1000).toISOString(),
+          },
+        ],
+      },
+    }),
+    NOW_MS
+  )
+  expect(
+    value.windows.find((w) => w.id === 'seven-day-fable')?.usedPercent
+  ).toBe(5)
+  const expired = buildEffectiveQuota(
+    account({
+      credential: { source: 'container' },
+      usage: {
+        five_hour: {
+          utilization: 80,
+          resets_at: new Date(NOW_MS - 1000).toISOString(),
+        },
+      },
+    }),
+    NOW_MS
+  )
+  expect(expired.windows[0].usedPercent).toBe(80)
+  expect(expired.windows[0].resetDone).toBe(false)
 })

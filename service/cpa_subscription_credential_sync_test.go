@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -147,4 +149,102 @@ func TestSyncCpaCredentialsNoPrune(t *testing.T) {
 	gotA, err = loadSnapshot(instance.ID, "a.json")
 	require.NoError(t, err)
 	assert.EqualValues(t, 20, gotA.Credential["success"])
+}
+
+func TestContainerCPARoutesAndQuotaRefresh(t *testing.T) {
+	percent := 90.0
+	var calls []string
+	credential := func() map[string]any {
+		return map[string]any{"id": "container-a", "name": "a", "source": "container", "provider": "claude", "auth_index": "opaque-a", "container_observation": map[string]any{
+			"usage":   map[string]any{"observed_at": "2026-11-25T12:00:00Z", "values": map[string]any{"limits": []any{map[string]any{"kind": "weekly_scoped", "percent": percent, "scope": map[string]any{"model": map[string]any{"display_name": "Fable 5"}}}}}},
+			"profile": map[string]any{"values": map[string]any{"subscription_type": "pro"}},
+		}}
+	}
+	failRefresh := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.URL.Path)
+		require.Equal(t, "Bearer k", r.Header.Get("Authorization"))
+		switch r.URL.Path {
+		case "/v8/management/credentials":
+			raw, _ := common.Marshal(map[string]any{"files": []any{credential()}})
+			_, _ = w.Write(raw)
+		case "/v8/management/account-environments/action":
+			var body map[string]any
+			require.NoError(t, common.DecodeJson(r.Body, &body))
+			assert.Equal(t, "a", body["slug"])
+			if body["action"] == "account-update" {
+				if failRefresh {
+					w.WriteHeader(503)
+					_, _ = w.Write([]byte(`{"error":"network_unavailable"}`))
+					return
+				}
+				percent = 5
+			}
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		default:
+			t.Errorf("unexpected legacy/credential API: %s", r.URL.Path)
+			w.WriteHeader(500)
+		}
+	}))
+	defer server.Close()
+	instance := setupCpaCredentialSyncDB(t, server.URL)
+	require.NoError(t, syncCpaAccountCredential(context.Background(), instance.ID, "a"))
+	snap, err := loadSnapshot(instance.ID, "a")
+	require.NoError(t, err)
+	require.Equal(t, "plan_pro", snap.PlanType)
+	require.NotNil(t, snap.Usage["limits"])
+	snap, err = RefreshCpaAccount(context.Background(), instance.ID, "a")
+	require.NoError(t, err)
+	limits := snap.Usage["limits"].([]any)
+	assert.Equal(t, 5.0, limits[0].(map[string]any)["percent"])
+	assert.Nil(t, snap.ResetGrants)
+	require.NoError(t, RefreshCpaAccountToken(context.Background(), instance.ID, "a"))
+	before := len(calls)
+	_, err = ClaimCpaResetGrant(context.Background(), instance.ID, "a")
+	require.ErrorContains(t, err, "does not support reset grants")
+	assert.Len(t, calls, before)
+	failRefresh = true
+	snap, err = RefreshCpaAccount(context.Background(), instance.ID, "a")
+	require.NoError(t, err)
+	assert.NotEmpty(t, snap.QuotaError)
+	assert.Equal(t, 5.0, snap.Usage["limits"].([]any)[0].(map[string]any)["percent"])
+	for _, path := range calls {
+		assert.NotContains(t, path, "api-call")
+		assert.NotContains(t, path, "download")
+	}
+}
+
+// Run only against the isolated CPA A/B fixture started by its acceptance runner.
+func TestContainerCPAIntegration(t *testing.T) {
+	endpoint := os.Getenv("CPA_AB_TEST_ENDPOINT")
+	if endpoint == "" {
+		t.Skip("isolated CPA A/B fixture not running")
+	}
+	require.True(t, strings.HasPrefix(endpoint, "http://127.0.0.1:"))
+	instance := setupCpaCredentialSyncDB(t, endpoint)
+	secret, err := EncryptCpaSecret(os.Getenv("CPA_AB_TEST_KEY"))
+	require.NoError(t, err)
+	require.NoError(t, model.DB.Model(instance).Update("secret_enc", secret).Error)
+	instance.SecretEnc = secret
+	credentials, err := SyncCpaInstance(context.Background(), instance)
+	require.NoError(t, err)
+	require.Len(t, credentials, 2)
+	assert.Equal(t, "container", credentials["a"]["source"])
+	snap, err := RefreshCpaAccount(context.Background(), instance.ID, "a")
+	require.NoError(t, err)
+	assert.Empty(t, snap.QuotaError)
+	assert.Equal(t, "plan_pro", snap.PlanType)
+	require.NotNil(t, snap.Usage["limits"])
+	assert.Equal(t, 5.0, snap.Usage["limits"].([]any)[0].(map[string]any)["percent"])
+	require.NoError(t, SetCpaAccountDisabled(context.Background(), instance.ID, "a", true))
+	snap, err = loadSnapshot(instance.ID, "a")
+	require.NoError(t, err)
+	assert.True(t, credentialBool(snap.Credential, "disabled"))
+	require.NoError(t, SetCpaAccountDisabled(context.Background(), instance.ID, "a", false))
+	proxy, err := RevealCpaAccountProxy(context.Background(), instance.ID, "a")
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(proxy, "socks5h://"))
+	models, err := ListCpaAccountModels(context.Background(), instance.ID, "a")
+	require.NoError(t, err)
+	assert.NotEmpty(t, models)
 }

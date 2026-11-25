@@ -1,3 +1,16 @@
+## 2026-11-25：对接容器 CPA（container-native4）
+
+- 根据 `credential.source=container` 识别独立账号容器，账号列表同步导入已裁剪的资料/用量观测；五秒本地同步不查询 Anthropic。手动用量刷新、令牌刷新及查看 SOCKS 走 CPA 的容器管理动作，不再下载凭据或使用宿主机通用 api-call。旧 CPA 的原有分支保留。
+- 停用/启用和模型列表仍沿用管理接口，由配套 CPA 源码绑定到容器账号；后台每日资料任务对于容器只读取快照，主动查询由手动“刷新用量”触发。
+- 接收 Fable scoped limits，以及较新的 `7d_oi` 被动观测；额度恢复后按新值显示。容器账号旧重置时间到达时不自行显示满额。重置卡领取在当前容器 CPA 尚不支持，明确拒绝，不能走宿主旧接口兜底。
+- CPA 配套分支：`fylsan3/CLIProxyAPI` 的 `codex/portable-capture1-source`，源码候选 `container-native4`。本次未修改已部署 NewAPI 或真实账号。部署前先更新 CPA 到配套候选，保留管理地址/管理密钥与模型 API 密钥的原有区别。
+
+验证：后端针对性测试、Fable 前端测试、类型检查、相关文件 lint、前端构建及完整 Mac 后端构建；NewAPI 管理代码实际连接封闭 CPA A/B，完成列表、用量、停用/启用、代理和模型列表验证。真实官方额度、OAuth 权限和生产部署未验证。独立 Linux 目标服务器部署仍待验证。
+
+安全依据：参考 [ASVS 5.0.0](https://asvs.owasp.org/)、[Authentication](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html) 与 [Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)；沿用已有管理认证、验证账号绑定、服务器端阻断不支持的重置卡操作、不下发订阅令牌。此项是接口适配验证，不代表完成全系统 ASVS 审核。隔离测试只使用虚构账号和临时密钥。
+
+下一步：部署配套版本后，用已有授权环境做一次真实联调；保留一小时长任务验收提醒。异机恢复不在本次范围。
+
 # New API 二开说明：「订阅账号」菜单
 
 本分支 `feat/subscription-accounts` 基于官方 [QuantumNous/new-api](https://github.com/QuantumNous/new-api) **`v1.0.0-rc.47`**（`e835b1b`）修改，
