@@ -1495,6 +1495,8 @@
     "Console Content": "控制台内容",
     "Consume": "消耗",
     "Consumed in the last 24 hours": "近 24 小时消耗量",
+    "Proxy managed by the account container; address fetched through CPA": "代理由账号容器管理；通过 CPA 获取地址",
+    "Ultra": "Ultra",
     "Container": "容器",
     "Container name": "容器名称",
     "Containers": "容器",

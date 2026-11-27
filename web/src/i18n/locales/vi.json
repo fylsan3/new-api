@@ -1495,6 +1495,8 @@
     "Console Content": "Nội dung bảng điều khiển",
     "Consume": "Tiêu thụ",
     "Consumed in the last 24 hours": "Đã tiêu thụ trong 24 giờ qua",
+    "Proxy managed by the account container; address fetched through CPA": "Proxy do container tài khoản quản lý; địa chỉ được lấy qua CPA",
+    "Ultra": "Ultra",
     "Container": "Thùng chứa",
     "Container name": "Tên container",
     "Containers": "Các thùng chứa",

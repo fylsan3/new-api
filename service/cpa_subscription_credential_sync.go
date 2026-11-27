@@ -16,7 +16,8 @@ import (
 // New API reads each CPA's credential list (GET /credentials) so the card
 // success / failed counts and status stay fresh. That list is served from
 // CPA memory and never reaches Anthropic, so it adds no upstream traffic.
-// Quota / plan are NOT refreshed here; they stay manual only.
+// Container quota / plan observations already held by CPA are imported here.
+// This polling does not trigger upstream profile or usage requests.
 //
 // Safety rules:
 //   - update / add only, never prune: a partial list (CPA restarting) must not

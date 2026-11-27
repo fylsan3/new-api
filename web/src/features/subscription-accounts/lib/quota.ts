@@ -36,10 +36,12 @@ const WINDOW_KEYS = [
   { key: 'seven_day_opus', id: 'seven-day-opus', labelKey: '7-day Opus' },
   { key: 'seven_day_sonnet', id: 'seven-day-sonnet', labelKey: '7-day Sonnet' },
   { key: 'seven_day_cowork', id: 'seven-day-cowork', labelKey: '7-day Cowork' },
+  { key: 'seven_day_oi', id: 'seven-day-fable', labelKey: '7-day Fable' },
   { key: 'iguana_necktie', id: 'seven-day-fable', labelKey: '7-day Fable' },
 ] as const
 
 export const PLAN_LABEL_KEYS: Record<string, string> = {
+  plan_ultra: 'Ultra',
   plan_team: 'Team',
   plan_max20: 'Max 20x',
   plan_max5: 'Max 5x',
@@ -63,6 +65,13 @@ export function toNumber(value: unknown): number | null {
   return null
 }
 
+function percentOf(value: unknown): number | null {
+  const valueNumber = toNumber(value)
+  return valueNumber !== null && valueNumber >= 0 && valueNumber <= 100
+    ? valueNumber
+    : null
+}
+
 function toStr(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null
 }
@@ -84,7 +93,7 @@ function findFableLimit(usage: Rec): Rec | null {
       .toLowerCase()
     const isFable = modelName === 'fable' || modelName === 'fable 5'
     return (
-      kind === 'weekly_scoped' && isFable && toNumber(limit.percent) !== null
+      kind === 'weekly_scoped' && isFable && percentOf(limit.percent) !== null
     )
   })
   return (
@@ -141,14 +150,21 @@ export function buildQuotaWindows(usage: Rec | undefined): QuotaWindow[] {
     const window = usage[key]
     if (!isRecord(window) || !('utilization' in window)) continue
     const isCreditPool = key === 'iguana_necktie' && isDollarWindow(window)
-    if (key === 'iguana_necktie' && fable && !isCreditPool) continue
+    if (
+      id === 'seven-day-fable' &&
+      !isCreditPool &&
+      (fable || windows.some((w) => w.id === id))
+    ) {
+      continue
+    }
+    if (percentOf(window.utilization) === null) continue
     if (isCreditPool) {
       // A full dollar balance is shown in the balance rows, not as a meter.
       if (dollarKeys.has(key)) continue
       windows.push({
         id: 'cloud-session-credits',
         labelKey: 'Cloud session credits',
-        usedPercent: toNumber(window.utilization),
+        usedPercent: percentOf(window.utilization),
         resetsAt: toStr(window.resets_at),
       })
       continue
@@ -156,13 +172,13 @@ export function buildQuotaWindows(usage: Rec | undefined): QuotaWindow[] {
     windows.push({
       id,
       labelKey,
-      usedPercent: toNumber(window.utilization),
+      usedPercent: percentOf(window.utilization),
       resetsAt: toStr(window.resets_at),
     })
   }
 
   if (fable) {
-    const used = toNumber(fable.percent)
+    const used = percentOf(fable.percent)
     if (used !== null) {
       windows.push({
         id: 'seven-day-fable',
@@ -261,7 +277,7 @@ export function remainingPercent(usedPercent: number | null): number | null {
 /**
  * CPA records the `anthropic-ratelimit-unified-*` headers of every Claude
  * reply in credential.quota.signals (header names canonicalised). Only the
- * 5-hour and 7-day windows are carried there; utilization is a 0-1 fraction
+ * 5-hour, 7-day and Fable windows may be carried there; utilization is a 0-1 fraction
  * and reset is unix seconds.
  */
 const SIGNAL_PREFIX = 'Anthropic-Ratelimit-Unified-'
@@ -296,13 +312,17 @@ export function buildPassiveQuota(
   const windows: QuotaWindow[] = []
   for (const { tag, id, labelKey } of PASSIVE_WINDOWS) {
     const fraction = toNumber(signalOf(signals, `${tag}-Utilization`))
-    if (fraction === null) continue
+    if (fraction === null || fraction < 0 || fraction > 1) continue
     const resetSec = toNumber(signalOf(signals, `${tag}-Reset`))
+    const resetDate = resetSec === null ? null : new Date(resetSec * 1000)
     windows.push({
       id,
       labelKey,
       usedPercent: fraction * 100,
-      resetsAt: resetSec ? new Date(resetSec * 1000).toISOString() : null,
+      resetsAt:
+        resetDate && Number.isFinite(resetDate.getTime())
+          ? resetDate.toISOString()
+          : null,
       limited:
         (signalOf(signals, `${tag}-Status`) ?? '').toLowerCase() === 'rejected',
     })
@@ -321,8 +341,8 @@ export type EffectiveQuota = {
 
 /**
  * Quota shown on the card: the newer of the chat-observed and the refreshed
- * 5-hour / 7-day windows; other windows (Opus, Sonnet, Fable ...) always come
- * from the refresh. A window whose reset time has passed reads as full.
+ * windows, retaining valid windows absent from the newer observation.
+ * Container accounts keep the last known usage until CPA observes a reset.
  */
 export function buildEffectiveQuota(
   account: CpaAccount,
@@ -340,6 +360,16 @@ export function buildEffectiveQuota(
     windows = [...passive.windows, ...rest]
     source = 'chat'
     observedAt = passive.observedAt
+  } else if (passive) {
+    const present = new Set(refreshed.map((w) => w.id))
+    windows = [
+      ...refreshed,
+      ...passive.windows.filter((w) => !present.has(w.id)),
+    ]
+    if (!refreshed.length) {
+      source = 'chat'
+      observedAt = passive.observedAt
+    }
   }
   windows = windows.map((window) => {
     const resetMs = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN
@@ -448,7 +478,9 @@ export function sortAccounts(accounts: CpaAccount[]): CpaAccount[] {
 }
 
 /** Container grants may be readable before spending is enabled server-side. */
-export function supportsResetGrant(account: Pick<CpaAccount, 'credential'>): boolean {
+export function supportsResetGrant(
+  account: Pick<CpaAccount, 'credential'>
+): boolean {
   if (account.credential?.source !== 'container') return true
   const capabilities = account.credential.container_capabilities
   return isRecord(capabilities) && capabilities.reset_grant === true

@@ -161,6 +161,7 @@ func TestContainerCPARoutesAndQuotaRefresh(t *testing.T) {
 		}}
 	}
 	failRefresh := false
+	partialRefresh := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.URL.Path)
 		require.Equal(t, "Bearer k", r.Header.Get("Authorization"))
@@ -179,6 +180,10 @@ func TestContainerCPARoutesAndQuotaRefresh(t *testing.T) {
 					return
 				}
 				percent = 5
+				if partialRefresh {
+					_, _ = w.Write([]byte(`{"ok":false,"partial":true,"account_observation":{"profile":{"error":"profile unavailable"}}}`))
+					return
+				}
 			}
 			_, _ = w.Write([]byte(`{"ok":true}`))
 		default:
@@ -203,6 +208,11 @@ func TestContainerCPARoutesAndQuotaRefresh(t *testing.T) {
 	_, err = ClaimCpaResetGrant(context.Background(), instance.ID, "a")
 	require.ErrorContains(t, err, "does not support reset grants")
 	assert.Len(t, calls, before)
+	partialRefresh = true
+	snap, err = RefreshCpaAccount(context.Background(), instance.ID, "a")
+	require.NoError(t, err)
+	assert.Contains(t, snap.QuotaError, "profile unavailable")
+	assert.Equal(t, 5.0, snap.Usage["limits"].([]any)[0].(map[string]any)["percent"])
 	failRefresh = true
 	snap, err = RefreshCpaAccount(context.Background(), instance.ID, "a")
 	require.NoError(t, err)
@@ -247,4 +257,21 @@ func TestContainerCPAIntegration(t *testing.T) {
 	models, err := ListCpaAccountModels(context.Background(), instance.ID, "a")
 	require.NoError(t, err)
 	assert.NotEmpty(t, models)
+}
+
+func TestContainerObservationKeepsNewerQuotaAndResetGrants(t *testing.T) {
+	snap := &CpaAccountSnapshot{QuotaObservedAt: 1806148800, ResetGrants: map[string]any{"eligible": true}, Credential: map[string]any{
+		"source": "container", "container_observation": map[string]any{
+			"usage":   map[string]any{"observed_at": "2026-11-25T11:00:00Z", "values": map[string]any{"five_hour": map[string]any{"utilization": 80}}},
+			"profile": map[string]any{"values": map[string]any{"subscription_type": "ultra"}},
+		},
+	}}
+	applyContainerObservation(snap)
+	require.Equal(t, "plan_ultra", snap.PlanType)
+	require.NotNil(t, snap.ResetGrants)
+	require.Nil(t, snap.Usage)
+	filtered := filterCredential(map[string]any{"container_dispatch": map[string]any{"ready": false}, "route_revision": 3, "access_token": "fictional-secret"})
+	require.NotNil(t, filtered["container_dispatch"])
+	require.Equal(t, 3, filtered["route_revision"])
+	require.NotContains(t, filtered, "access_token")
 }

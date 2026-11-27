@@ -1495,6 +1495,8 @@
     "Console Content": "Console Content",
     "Consume": "Consume",
     "Consumed in the last 24 hours": "Consumed in the last 24 hours",
+    "Proxy managed by the account container; address fetched through CPA": "Proxy managed by the account container; address fetched through CPA",
+    "Ultra": "Ultra",
     "Container": "Container",
     "Container name": "Container name",
     "Containers": "Containers",

@@ -388,7 +388,7 @@ var cpaCredentialFields = []string{
 	"recent_requests", "quota", "model_quotas", "email", "account_type", "account",
 	"created_at", "modtime", "updated_at", "last_refresh", "next_retry_after", "priority",
 	"note", "weight", "cooldowns", "access_token_expires_at", "requires_sign_in",
-	"refresh_error", "renewal_state", "recovery_stage", "container_observation", "container_capabilities",
+	"refresh_error", "renewal_state", "recovery_stage", "container_observation", "container_capabilities", "container_dispatch", "route_revision",
 }
 
 func filterCredential(raw map[string]any) map[string]any {

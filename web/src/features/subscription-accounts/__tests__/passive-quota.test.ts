@@ -219,3 +219,56 @@ it('updates Fable from a newer container observation without inventing a reset',
   expect(expired.windows[0].usedPercent).toBe(80)
   expect(expired.windows[0].resetDone).toBe(false)
 })
+
+describe('current container CPA quota contract', () => {
+  it('keeps a valid chat window when a newer refresh omits it', () => {
+    const result = buildEffectiveQuota(
+      account({
+        credential: {
+          source: 'container',
+          quota: {
+            observed_at: new Date(NOW_MS - 1000).toISOString(),
+            signals: signals(),
+          },
+        },
+        usage: { five_hour: { utilization: 10 } },
+        quota_observed_at: NOW_SEC,
+      }),
+      NOW_MS
+    )
+    expect(result.windows.find((w) => w.id === 'five-hour')?.usedPercent).toBe(
+      10
+    )
+    expect(result.windows.find((w) => w.id === 'seven-day')?.usedPercent).toBe(
+      53
+    )
+  })
+  it('rejects invalid ratios and tolerates an invalid reset timestamp', () => {
+    const result = buildPassiveQuota({
+      quota: {
+        observed_at: new Date(NOW_MS).toISOString(),
+        signals: signals({
+          'Anthropic-Ratelimit-Unified-5h-Utilization': '-1',
+          'Anthropic-Ratelimit-Unified-7d-Reset': '1e100',
+        }),
+      },
+    })
+    expect(result?.windows).toHaveLength(1)
+    expect(result?.windows[0].resetsAt).toBeNull()
+  })
+  it('reads the direct Fable window without duplicating its legacy alias', () => {
+    const result = buildEffectiveQuota(
+      account({
+        usage: {
+          seven_day_oi: { utilization: 12 },
+          iguana_necktie: { utilization: 80 },
+        },
+      }),
+      NOW_MS
+    )
+    expect(
+      result.windows.filter((w) => w.id === 'seven-day-fable')
+    ).toHaveLength(1)
+    expect(result.windows[0].usedPercent).toBe(12)
+  })
+})

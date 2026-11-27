@@ -76,10 +76,14 @@ export function SocksBadge(props: {
   const blocked = isProxyBlocked(props.account)
   // Badge look: a direct account shows amber "Direct"; an invalid proxy_url
   // is a fault and shows red, like a failed check.
-  const direct = state === 'missing' && !blocked
+  const container = props.account.credential?.source === 'container'
+  const direct = !container && state === 'missing' && !blocked
   let look = STATE_CLASS[state]
   if (direct) look = DIRECT_CLASS
   else if (blocked) look = STATE_CLASS.failed
+  let badgeText = 'SOCKS'
+  if (container) badgeText = t('Container')
+  else if (direct) badgeText = t('Direct')
   const masked = props.account.proxy_url || t('Not configured')
 
   const revealMutation = useMutation({
@@ -88,13 +92,17 @@ export function SocksBadge(props: {
     onError: (error) => handleServerError(error),
   })
 
-  const stateText = {
-    ok: t('SOCKS reachable at last check'),
-    failed: t('SOCKS unreachable at last check'),
-    missing: blocked
-      ? t('socks5 proxy is invalid, quota checks are blocked')
-      : t('No socks5 proxy configured, quota checks and chats go out directly'),
-  }[state]
+  const stateText = container
+    ? t('Proxy managed by the account container; address fetched through CPA')
+    : {
+        ok: t('SOCKS reachable at last check'),
+        failed: t('SOCKS unreachable at last check'),
+        missing: blocked
+          ? t('socks5 proxy is invalid, quota checks are blocked')
+          : t(
+              'No socks5 proxy configured, quota checks and chats go out directly'
+            ),
+      }[state]
 
   return (
     <Popover
@@ -124,7 +132,7 @@ export function SocksBadge(props: {
         }
       >
         <span className={cn('size-1.5 rounded-full', look.dot)} />
-        {direct ? t('Direct') : 'SOCKS'}
+        {badgeText}
       </PopoverTrigger>
       <PopoverContent align='end' className='w-72 space-y-1.5 text-xs'>
         <div className='font-medium'>{stateText}</div>

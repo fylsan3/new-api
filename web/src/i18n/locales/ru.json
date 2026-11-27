@@ -1495,6 +1495,8 @@
     "Console Content": "Содержимое консоли",
     "Consume": "Расход",
     "Consumed in the last 24 hours": "Потреблено за последние 24 часа",
+    "Proxy managed by the account container; address fetched through CPA": "Прокси управляется контейнером аккаунта; адрес получается через CPA",
+    "Ultra": "Ultra",
     "Container": "Контейнер",
     "Container name": "Имя контейнера",
     "Containers": "Контейнеры",

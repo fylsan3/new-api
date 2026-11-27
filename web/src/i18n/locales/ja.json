@@ -1495,6 +1495,8 @@
     "Console Content": "コンソールコンテンツ",
     "Consume": "消費",
     "Consumed in the last 24 hours": "直近24時間の消費量",
+    "Proxy managed by the account container; address fetched through CPA": "プロキシはアカウントのコンテナで管理され、アドレスは CPA から取得します",
+    "Ultra": "Ultra",
     "Container": "コンテナ",
     "Container name": "コンテナ名",
     "Containers": "コンテナ",
